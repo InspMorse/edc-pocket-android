@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.EdcPocket" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@color/edc_bg</item>
+        <item name="android:navigationBarColor">@color/edc_bg</item>
+        <item name="android:windowBackground">@color/edc_bg</item>
+        <item name="android:colorAccent">@color/edc_cyan</item>
+    </style>
+</resources>
