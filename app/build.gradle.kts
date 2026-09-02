@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.devtools.ksp")
 }
 
 import java.util.Properties
@@ -21,8 +22,8 @@ android {
         applicationId = "house.edc.pocket"
         minSdk = 31
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.1"
+        versionCode = 9
+        versionName = "1.3"
     }
 
     signingConfigs {
@@ -85,6 +86,9 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.glance:glance-material3:1.1.1")
     implementation("io.coil-kt:coil-compose:2.7.0")

@@ -19,11 +19,31 @@ data class OutboxItem(
     val imagePath: String = "",
     val mime: String = "image/jpeg",
     val createdAt: Long = System.currentTimeMillis(),
+    val attemptCount: Int = 0,
+    val lastError: String = "",
+    val nextRetryAt: Long = 0L,
 ) {
     fun label(): String = when (kind) {
         OutboxKind.CLIP -> "Clipboard · ${text.preview()}"
         OutboxKind.LIST -> "List · ${text.preview()}"
         OutboxKind.PHOTO -> "Photo · ${filename.ifBlank { "image" }}"
+    }
+
+    fun statusLine(): String? {
+        if (lastError.isBlank() && attemptCount == 0) return null
+        val retry = if (nextRetryAt > System.currentTimeMillis()) {
+            " · retry later"
+        } else {
+            ""
+        }
+        return buildString {
+            if (attemptCount > 0) append("Tried $attemptCount×")
+            if (lastError.isNotBlank()) {
+                if (isNotEmpty()) append(" · ")
+                append(lastError)
+            }
+            append(retry)
+        }.ifBlank { null }
     }
 
     internal fun toJson(): JSONObject = JSONObject().apply {
@@ -35,6 +55,9 @@ data class OutboxItem(
         put("imagePath", imagePath)
         put("mime", mime)
         put("createdAt", createdAt)
+        put("attemptCount", attemptCount)
+        put("lastError", lastError)
+        put("nextRetryAt", nextRetryAt)
     }
 
     companion object {
@@ -48,6 +71,9 @@ data class OutboxItem(
             imagePath = obj.optString("imagePath"),
             mime = obj.optString("mime", "image/jpeg"),
             createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+            attemptCount = obj.optInt("attemptCount", 0),
+            lastError = obj.optString("lastError"),
+            nextRetryAt = obj.optLong("nextRetryAt", 0L),
         )
 
         internal fun listFromJson(raw: String): List<OutboxItem> {

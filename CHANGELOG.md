@@ -7,6 +7,20 @@ Versioning: **0.x** = pre-release phases · **1.0** = Phase 6 trust release · *
 
 ---
 
+## [1.3.0] — Phase 8
+
+### Added
+
+- Room cache for clipboard, list, and incoming with last-synced timestamps
+- Conditional fetch via `ETag` / `If-Modified-Since` (`SyncCoordinator`)
+- Outbox v2 — per-item retry count, failure reason, exponential backoff
+- Connection doctor in Settings (per-endpoint latency + copy debug log)
+- Staleness UI — “cached 5 min ago” in status bar and offline banner
+- Conflict hint when house data changed while queued sends were pending
+- Adaptive foreground/background sync (`SyncPolicy`) — slower poll when SSE active
+- SSE live stream client (`/api/events`) with graceful fallback to polling
+- FCM push registration stub when host exposes `push` capability *(needs Firebase + host)*
+
 ## [1.1.0] — Phase 7
 
 ### Added

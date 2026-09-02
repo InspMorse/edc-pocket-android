@@ -27,14 +27,36 @@ class EdcClient(
     }
 
     private fun get(base: String, path: String, identity: String): Pair<Int, String> {
-        val req = Request.Builder()
+        val res = fetchEndpoint(base, path, identity)
+        return res.code to res.body
+    }
+
+    fun fetchEndpoint(
+        base: String,
+        path: String,
+        identity: String,
+        ifNoneMatch: String = "",
+        ifModifiedSince: String = "",
+    ): EndpointResponse {
+        val builder = Request.Builder()
             .url(url(base, path, identity))
             .addHeader("from", identity)
             .get()
-            .build()
-        http.newCall(req).execute().use { res ->
-            return res.code to (res.body?.string().orEmpty())
+        if (ifNoneMatch.isNotBlank()) builder.addHeader("If-None-Match", ifNoneMatch)
+        if (ifModifiedSince.isNotBlank()) builder.addHeader("If-Modified-Since", ifModifiedSince)
+        http.newCall(builder.build()).execute().use { res ->
+            return EndpointResponse(
+                code = res.code,
+                body = if (res.code == 304) "" else res.body?.string().orEmpty(),
+                etag = res.header("ETag").orEmpty(),
+                lastModified = res.header("Last-Modified").orEmpty(),
+            )
         }
+    }
+
+    fun registerPushToken(base: String, identity: String, token: String) {
+        val body = """{"token":${token.json()},"from":${identity.json()}}""".toRequestBody(jsonType)
+        post(base, "/api/push/register", identity, body)
     }
 
     fun probeHealth(base: String, identity: String): HostHealth {
@@ -80,6 +102,10 @@ class EdcClient(
         upload = healthCaps.upload && apiCaps.upload,
         sessionUpload = healthCaps.sessionUpload && apiCaps.sessionUpload,
         dashboard = healthCaps.dashboard && apiCaps.dashboard,
+        conditionalFetch = healthCaps.conditionalFetch && apiCaps.conditionalFetch,
+        sse = healthCaps.sse || apiCaps.sse,
+        websocket = healthCaps.websocket || apiCaps.websocket,
+        push = healthCaps.push || apiCaps.push,
     )
 
     fun probe(base: String, identity: String): String = probeHealth(base, identity).summary()

@@ -26,6 +26,10 @@ internal fun parseCapabilities(root: org.json.JSONObject): HostCapabilities {
             upload = listed("upload", "incoming", "drop", "photo"),
             sessionUpload = listed("session", "session_upload", "sessions"),
             dashboard = listed("dashboard", "web", "links"),
+            conditionalFetch = listed("conditional", "etag", "if_none_match"),
+            sse = listed("sse", "events", "event_stream"),
+            websocket = listed("websocket", "ws"),
+            push = listed("push", "fcm", "notifications"),
         )
     }
 
@@ -38,6 +42,10 @@ internal fun parseCapabilities(root: org.json.JSONObject): HostCapabilities {
         upload = capsObj.flag("upload", "photo_upload", default = true),
         sessionUpload = capsObj.flag("session", "session_upload", default = true),
         dashboard = capsObj.flag("dashboard", "dashboard_links", default = true),
+        conditionalFetch = capsObj.flag("conditional_fetch", "etag", "conditional", default = true),
+        sse = capsObj.flag("sse", "events", default = false),
+        websocket = capsObj.flag("websocket", "ws", default = false),
+        push = capsObj.flag("push", "fcm", default = false),
     )
 }
 

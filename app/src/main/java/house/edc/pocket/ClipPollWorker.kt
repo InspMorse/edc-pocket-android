@@ -19,10 +19,11 @@ class ClipPollWorker(
         if (base.isBlank()) return Result.success()
 
         val client = EdcClient(context.contentResolver)
-        val snapshot = runCatching { client.load(base, settings.identity) }.getOrNull()
+        val syncCoordinator = SyncCoordinator(client, SyncCache(context))
+        val outcome = runCatching { syncCoordinator.sync(settings) }.getOrNull()
             ?: return Result.retry()
 
-        val latest = snapshot.latest ?: snapshot.history.firstOrNull()
+        val latest = outcome.snapshot.latest ?: outcome.snapshot.history.firstOrNull()
         val clipStore = LatestClipStore(context)
         val previousNotified = clipStore.lastNotifiedFingerprint()
 

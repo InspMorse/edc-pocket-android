@@ -123,17 +123,8 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class PocketTab(val label: String) {
-    CLIP("Clip"),
-    LIST("List"),
-    SEND("Send"),
-    SETTINGS("Settings"),
-}
-
 private val identities = listOf("Mike", "Mhairi")
 private val clipFilters = listOf("All", "Mike", "Mhairi", "EDC")
-private const val pollMsActive = 5_000L
-private const val pollMsIdle = 15_000L
 private const val clipPreviewChars = 220
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -142,10 +133,12 @@ fun PocketApp(
     settings: EdcSettings,
     store: SettingsStore,
     client: EdcClient,
+    syncCoordinator: SyncCoordinator,
     outboxStore: OutboxStore,
     outboxProcessor: OutboxProcessor,
     hostConnector: HostConnector,
     networkMonitor: NetworkMonitor,
+    connectionDoctor: ConnectionDoctor,
     launchAction: LaunchAction = LaunchAction.NONE,
     onLaunchActionHandled: () -> Unit = {},
 ) {
@@ -182,6 +175,9 @@ fun PocketApp(
         var status by remember { mutableStateOf<String?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
         var stale by remember { mutableStateOf(false) }
+        var lastSyncedAt by remember { mutableStateOf<Long?>(null) }
+        var liveStreamActive by remember { mutableStateOf(false) }
+        var offlineBaseline by remember { mutableStateOf<String?>(null) }
         var pullRefreshing by remember { mutableStateOf(false) }
         var urlValidationError by remember { mutableStateOf<String?>(null) }
         var uploadProgress by remember { mutableStateOf<UploadProgress?>(null) }
@@ -194,37 +190,72 @@ fun PocketApp(
                 status = null
                 if (!silent) snapshot = HostSnapshot()
                 stale = false
+                lastSyncedAt = null
                 return
             }
             if (!silent) loading = true
             val result = withContext(Dispatchers.IO) {
-                runCatching {
-                    val snap = client.load(base, settings.identity)
-                    val health = runCatching { client.probeHealth(base, settings.identity) }.getOrNull()
-                    snap to health
-                }
+                runCatching { syncCoordinator.sync(settings, healthHint = hostHealth) }
             }
             if (!silent) loading = false
             result.fold(
-                onSuccess = { (snap, health) ->
-                    snapshot = snap
-                    if (health != null) hostHealth = health
-                    error = null
-                    stale = false
-                    status = connectionLabel(settings, stale = false, error = null)
-                    val entry = snap.latest ?: snap.history.firstOrNull()
-                    if (entry != null) {
+                onSuccess = { outcome ->
+                    val previousFingerprint = snapshotFingerprint(snapshot)
+                    snapshot = outcome.snapshot
+                    if (outcome.health != null) hostHealth = outcome.health
+                    stale = outcome.stale
+                    lastSyncedAt = outcome.lastSyncedAt
+                    error = if (outcome.stale) {
+                        hostFailureMessage(settings, cause = null, stale = true)
+                    } else {
+                        null
+                    }
+                    status = connectionLabel(
+                        settings = settings,
+                        stale = outcome.stale,
+                        error = error,
+                        lastSyncedAt = lastSyncedAt,
+                    )
+                    val entry = outcome.snapshot.latest ?: outcome.snapshot.history.firstOrNull()
+                    if (entry != null && outcome.fromNetwork) {
                         LatestClipStore(context).save(entry)
                         scope.launch { EdcWidgetUpdater.updateAll(context) }
                     }
+                    if (outcome.fromNetwork && offlineBaseline != null) {
+                        val newFp = snapshotFingerprint(outcome.snapshot)
+                        if (newFp != offlineBaseline) {
+                            snackbar.showSnackbar(
+                                message = "House data changed while you were offline — review clips and list",
+                                duration = SnackbarDuration.Long,
+                            )
+                        }
+                        offlineBaseline = null
+                    }
+                    if (outcome.stale && offlineBaseline == null && outboxItems.isNotEmpty()) {
+                        offlineBaseline = previousFingerprint
+                    }
+                    if (outcome.health != null && outcome.fromNetwork) {
+                        PushRegistration.registerIfPossible(context, client, settings, outcome.health)
+                    }
                 },
                 onFailure = {
-                    stale = snapshot.latest != null ||
-                        snapshot.history.isNotEmpty() ||
-                        snapshot.todos.isNotEmpty() ||
-                        snapshot.drops.isNotEmpty()
-                    error = hostFailureMessage(settings, it.message, stale = stale)
-                    status = null
+                    val cached = withContext(Dispatchers.IO) { syncCoordinator.loadCached(settings) }
+                    if (cached != null) {
+                        snapshot = cached
+                        stale = true
+                        lastSyncedAt = withContext(Dispatchers.IO) {
+                            syncCoordinator.lastSyncedAt(settings)
+                        }
+                        error = hostFailureMessage(settings, it.message, stale = true)
+                        status = connectionLabel(settings, stale = true, error = error, lastSyncedAt = lastSyncedAt)
+                    } else {
+                        stale = snapshot.latest != null ||
+                            snapshot.history.isNotEmpty() ||
+                            snapshot.todos.isNotEmpty() ||
+                            snapshot.drops.isNotEmpty()
+                        error = hostFailureMessage(settings, it.message, stale = stale)
+                        status = null
+                    }
                 },
             )
         }
@@ -336,8 +367,9 @@ fun PocketApp(
             pullRefreshing = false
         }
 
-        LaunchedEffect(settings.backgroundPoll) {
-            PollScheduler.apply(context, settings.backgroundPoll)
+        LaunchedEffect(settings.backgroundPoll, hostHealth) {
+            val mode = SyncPolicy.effectiveBackgroundPoll(settings, hostHealth)
+            PollScheduler.apply(context, mode)
         }
 
         LaunchedEffect(settings.baseUrl, settings.identity, resumeTick) {
@@ -361,15 +393,24 @@ fun PocketApp(
             flushOutbox()
         }
 
-        LaunchedEffect(currentTab, settings.baseUrl, settings.identity) {
+        LaunchedEffect(currentTab, settings.baseUrl, settings.identity, liveStreamActive) {
             while (isActive) {
-                val delayMs = when (currentTab) {
-                    PocketTab.CLIP, PocketTab.LIST -> pollMsActive
-                    else -> pollMsIdle
-                }
+                val delayMs = SyncPolicy.foregroundPollMs(currentTab, hostHealth, liveStreamActive)
                 delay(delayMs)
                 refresh(silent = true)
             }
+        }
+
+        LaunchedEffect(settings.baseUrl, settings.identity, hostHealth?.capabilities?.sse) {
+            liveStreamActive = false
+            if (settings.baseUrl.isBlank()) return@LaunchedEffect
+            val stream = HostEventStream()
+            if (!stream.canUse(hostHealth)) return@LaunchedEffect
+            liveStreamActive = true
+            stream.listen(settings.baseUrl, settings.identity) {
+                refresh(silent = true)
+            }
+            liveStreamActive = false
         }
 
         LaunchedEffect(currentTab, settings.baseUrl, settings.identity) {
@@ -426,7 +467,12 @@ fun PocketApp(
                         Column {
                             Text("EDC pocket")
                             Text(
-                                text = settings.identity + " · " + connectionLabel(settings, stale, error),
+                                text = settings.identity + " · " + connectionLabel(
+                                    settings,
+                                    stale,
+                                    error,
+                                    lastSyncedAt,
+                                ),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = EdcMuted,
                             )
@@ -488,7 +534,10 @@ fun PocketApp(
                     )
                 }
                 val banner = when {
-                    stale && error != null -> "$error · showing last known"
+                    stale && error != null -> {
+                        val age = formatStaleness(lastSyncedAt)
+                        if (age != null) "$error · $age" else "$error · showing last known"
+                    }
                     error != null -> error
                     outboxItems.isNotEmpty() -> "${outboxItems.size} send(s) queued"
                     else -> status
@@ -979,6 +1028,7 @@ fun PocketApp(
                         },
                         useHttps = settings.useHttps,
                         onUseHttps = { scope.launch { store.setUseHttps(it) } },
+                        connectionDoctor = connectionDoctor,
                     )
                 }
             }
@@ -1537,7 +1587,12 @@ private fun SettingsPane(
     onOpenDashboard: () -> Unit,
     useHttps: Boolean,
     onUseHttps: (Boolean) -> Unit,
+    connectionDoctor: ConnectionDoctor,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var doctorReport by remember { mutableStateOf<ConnectionReport?>(null) }
+    var doctorRunning by remember { mutableStateOf(false) }
     var customDraft by remember(settings.customUrl) { mutableStateOf(settings.customUrl) }
     Column(
         modifier = Modifier
@@ -1657,6 +1712,53 @@ private fun SettingsPane(
         OutlinedButton(onClick = onFindHost, modifier = Modifier.fillMaxWidth()) {
             Text("Find host (Home, then Away)")
         }
+        SectionLabel("Connection doctor")
+        Text(
+            text = "Checks each host endpoint and latency. Copy the log if something fails.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        Button(
+            onClick = {
+                scope.launch {
+                    doctorRunning = true
+                    doctorReport = withContext(Dispatchers.IO) { connectionDoctor.run(settings) }
+                    doctorRunning = false
+                }
+            },
+            enabled = !doctorRunning,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (doctorRunning) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = EdcAccent,
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(if (doctorRunning) "Running checks…" else "Run connection doctor")
+        }
+        doctorReport?.let { report ->
+            report.checks.forEach { check ->
+                Text(
+                    text = "${check.name}: ${check.code} · ${check.latencyMs}ms" +
+                        if (check.detail.isNotBlank()) " · ${check.detail}" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (check.ok) EdcMuted else MaterialTheme.colorScheme.error,
+                )
+            }
+            OutlinedButton(
+                onClick = {
+                    val log = connectionDoctor.exportLog(report)
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(ClipData.newPlainText("EDC doctor", log))
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Copy debug log")
+            }
+        }
         if (hostHealth != null) {
             SectionLabel("Host info")
             Text(
@@ -1697,6 +1799,13 @@ private fun SettingsPane(
                     style = MaterialTheme.typography.bodySmall,
                     color = EdcMuted,
                 )
+                item.statusLine()?.let { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
             Button(onClick = onFlushOutbox, modifier = Modifier.fillMaxWidth()) {
                 Text("Retry queued sends")
@@ -1920,9 +2029,17 @@ private fun EmptyHint(text: String, modifier: Modifier = Modifier) {
 private fun effectiveIdentities(health: HostHealth?): List<String> =
     health?.knownUsers?.takeIf { it.isNotEmpty() } ?: identities
 
-private fun connectionLabel(settings: EdcSettings, stale: Boolean, error: String?): String {
-    if (stale && error != null) return "Offline · cached"
+private fun connectionLabel(
+    settings: EdcSettings,
+    stale: Boolean,
+    error: String?,
+    lastSyncedAt: Long? = null,
+): String {
+    if (stale && error != null) {
+        return formatStaleness(lastSyncedAt) ?: "Offline · cached"
+    }
     if (error != null) return "Unreachable"
+    formatStaleness(lastSyncedAt)?.let { return it.replaceFirstChar { c -> c.uppercase() } }
     return when (settings.preset) {
         HostPreset.LAN -> "Home LAN"
         HostPreset.TAILSCALE -> "Away"

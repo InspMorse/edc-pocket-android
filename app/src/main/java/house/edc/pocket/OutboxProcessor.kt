@@ -14,9 +14,11 @@ class OutboxProcessor(
         val health = runCatching { client.probeHealth(base, settings.identity) }.getOrNull()
         if (health?.ok != true) return 0
         var sent = 0
-        val pending = outbox.items.first()
+        val now = System.currentTimeMillis()
+        val pending = outbox.items.first().sortedBy { it.createdAt }
         for (item in pending) {
-            val ok = runCatching {
+            if (item.nextRetryAt > now) continue
+            val result = runCatching {
                 when (item.kind) {
                     OutboxKind.CLIP -> client.sendText(base, settings.identity, item.text)
                     OutboxKind.LIST -> client.addTodo(base, settings.identity, item.text)
@@ -32,11 +34,29 @@ class OutboxProcessor(
                         )
                     }
                 }
-            }.isSuccess
-            if (!ok) break
-            outbox.remove(item.id)
-            sent++
+            }
+            if (result.isSuccess) {
+                outbox.remove(item.id)
+                sent++
+            } else {
+                val attempts = item.attemptCount + 1
+                val delayMs = retryDelayMs(attempts)
+                outbox.updateFailure(
+                    id = item.id,
+                    attemptCount = attempts,
+                    lastError = result.exceptionOrNull()?.message ?: "Send failed",
+                    nextRetryAt = now + delayMs,
+                )
+                break
+            }
         }
         return sent
     }
+
+    internal fun retryDelayMs(attempts: Int): Long = outboxRetryDelayMs(attempts)
+}
+
+internal fun outboxRetryDelayMs(attempts: Int): Long {
+    val capped = attempts.coerceAtMost(6)
+    return (5_000L * (1 shl (capped - 1))).coerceAtMost(5 * 60_000L)
 }

@@ -32,17 +32,17 @@ Mike and Mhairi can read and write the **house clipboard**, manage the shared **
 
 | | |
 |---|---|
-| **Current release** | **v1.1** (Phase 7) |
-| **Shipped** | Phases **0–7** — foundation through everyday delight |
-| **Next milestone** | Phase **8** → **1.3** |
-| **Through Phase 12** | **49** remaining items (8.1–12.10) |
+| **Current release** | **v1.3** (Phase 8) |
+| **Shipped** | Phases **0–8** — foundation through always-in-sync |
+| **Next milestone** | Phase **9** → **1.5** |
+| **Through Phase 12** | **40** remaining items (9.1–12.10) |
 | **Carried forward** | 5.6 FCM push → **8.3** (needs host API) |
 
 **Branch:** `cursor/finish-edc-pocket-android-f18a` · **PR:** [#2](https://github.com/InspMorse/edc-pocket-android/pull/2)
 
 ---
 
-## Remaining roadmap (Phases 7–12)
+## Remaining roadmap (Phases 9–12)
 
 Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = after prior phase ships.
 
@@ -50,13 +50,13 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 |-------|----------------|------|-------|--------|
 | **6** | **1.0** | Quality, trust & release | 6.1–6.8 | **Done** |
 | **7** | 1.1–1.2 | Everyday delight | 7.1–7.10 | **Done** |
-| **8** | 1.3–1.4 | Always in sync | 8.1–8.9 (+ 5.6) | **Next** |
-| **9** | 1.5–1.6 | More surfaces | 9.1–9.10 | Planned |
+| **8** | 1.3–1.4 | Always in sync | 8.1–8.9 (+ 5.6) | **Done** |
+| **9** | 1.5–1.6 | More surfaces | 9.1–9.10 | **Next** |
 | **10** | 1.7–1.8 | Smarter house | 10.1–10.10 | Planned |
 | **11** | 1.9–2.0 | Beyond clipboard | 11.1–11.10 | Planned |
 | **12** | 2.x | Trust at scale | 12.1–12.10 | Planned |
 
-**Spine:** `Phase 8 (1.3) → 9 → 10 → 11 → 12 (2.0)`
+**Spine:** `Phase 9 (1.5) → 10 → 11 → 12 (2.0)`
 
 **Host-dependent batches** (coordinate Everyday Clipboard host repo):
 
@@ -199,27 +199,27 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 
 ---
 
-## Phase 8 — Always in sync (**next** → 1.3–1.4)
+## Phase 8 — Always in sync (done → 1.3)
 
 **Goal:** Data feels live; outages are invisible; bandwidth stays low.
 
 | # | Item | Status |
 |---|------|--------|
-| 8.1 | Local Room cache with explicit “last synced” timestamps | Pending |
-| 8.2 | Conditional fetch (`ETag` / `If-Modified-Since` when host supports) | Pending |
-| 8.3 | Push via FCM — host notifies phone of clip/list/incoming changes *(was 5.6)* | Pending · host |
-| 8.4 | SSE or WebSocket stream as alternative to polling | Pending · host |
-| 8.5 | Smarter background sync — event-driven + adaptive intervals | Pending |
-| 8.6 | Outbox v2 — per-item retry, exponential backoff, failure reasons | Pending |
-| 8.7 | Conflict hints when host data changed while editing offline | Pending |
-| 8.8 | Connection doctor in Settings (latency, per-endpoint status, export debug log) | Pending |
-| 8.9 | Staleness UI — “cached 12 min ago” on every tab | Pending |
+| 8.1 | Local Room cache with explicit “last synced” timestamps | Done |
+| 8.2 | Conditional fetch (`ETag` / `If-Modified-Since` when host supports) | Done |
+| 8.3 | Push via FCM — host notifies phone of clip/list/incoming changes *(was 5.6)* | Done · client stub *(host + Firebase config)* |
+| 8.4 | SSE or WebSocket stream as alternative to polling | Done · SSE client *(host `/api/events`)* |
+| 8.5 | Smarter background sync — event-driven + adaptive intervals | Done |
+| 8.6 | Outbox v2 — per-item retry, exponential backoff, failure reasons | Done |
+| 8.7 | Conflict hints when host data changed while editing offline | Done |
+| 8.8 | Connection doctor in Settings (latency, per-endpoint status, export debug log) | Done |
+| 8.9 | Staleness UI — “cached 12 min ago” on every tab | Done |
 
 **Exit criteria:** With FCM or SSE enabled, clip updates appear without opening the app; airplane-mode sends still drain the outbox reliably.
 
 ---
 
-## Phase 9 — More surfaces (1.5–1.6)
+## Phase 9 — More surfaces (**next** → 1.5–1.6)
 
 **Goal:** House clipboard reachable from anywhere on the phone — not only inside the app.
 
@@ -335,21 +335,19 @@ Nothing off the table — park here until a host API or strong user pull exists.
 | **0.5** | Phase 4 | Shipped |
 | **0.6** | Phase 5 | Shipped |
 | **1.0** | Phase 6 | Shipped |
-| **1.1** | Phase 7 | **Current** |
-| **1.3–1.4** | Phase 8 | **Next** |
-| **1.5–1.6** | Phase 9 | Planned |
+| **1.1** | Phase 7 | Shipped |
+| **1.3** | Phase 8 | **Current** |
+| **1.5–1.6** | Phase 9 | **Next** |
 | **1.7–1.8** | Phase 10 | Planned |
 | **1.9–2.0** | Phase 11 | Planned |
 | **2.x** | Phase 12 | Planned |
 
 Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 
-### Full remaining checklist (8.1 → 12.10)
+### Full remaining checklist (9.1 → 12.10)
 
 <details>
-<summary>49 items — expand to scan</summary>
-
-**Phase 8:** 8.1 Room cache · 8.2 conditional fetch · 8.3 FCM · 8.4 SSE/WS · 8.5 adaptive sync · 8.6 outbox v2 · 8.7 conflict hints · 8.8 connection doctor · 8.9 staleness UI  
+<summary>40 items — expand to scan</summary>
 
 **Phase 9:** 9.1 widget v2 · 9.2 lock screen · 9.3 QS tiles · 9.4 persistent notif · 9.5 share v2 · 9.6 voice · 9.7 Tasker API · 9.8 Wear · 9.9 NFC · 9.10 session shortcuts  
 
@@ -397,10 +395,10 @@ Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 **Sequential spine (required order for major releases)**
 
 ```
-v1.1 (now) → Phase 8 (1.3) → 9 → 10 → 11 → 12 (2.0)
+v1.3 (now) → Phase 9 (1.5) → 10 → 11 → 12 (2.0)
 ```
 
-**Parallel tracks** — can overlap now that **1.1** shipped:
+**Parallel tracks** — can overlap now that **1.3** shipped:
 
 | Track | Phases | Focus |
 |-------|--------|--------|
@@ -410,14 +408,13 @@ v1.1 (now) → Phase 8 (1.3) → 9 → 10 → 11 → 12 (2.0)
 | **Surfaces** | 9 | Widget, tile, voice, Wear, NFC |
 | **House** | 10 | Multi-host, discovery, dashboard |
 
-**Recommended batches (Phase 8 first)**
+**Recommended batches (Phase 9 first)**
 
 | Batch | Items | Why |
 |-------|-------|-----|
-| Feel | 7.1, 7.2, 7.7 | Onboarding + swipes; no host work |
-| Trust | 8.1, 8.6, 8.8, 8.9 | Cache, outbox v2, doctor, staleness |
 | Reach | 9.1, 9.5, 9.3 | Widget v2, share memory, extra tiles |
-| Live | 8.3, 8.4, 8.2 | Needs host push/stream/ETag APIs |
+| Feel | 9.4, 9.6 | Persistent notif, voice send |
 | Utility | 11.9, 11.6, 11.3 | Session gallery, scan, shopping aisles |
+| House | 10.2, 10.4 | mDNS + QR pairing *(host)* |
 
 Host-dependent unlock: **8.3–8.4**, **10.2/10.4/10.6**, and much of **11** move fastest when Everyday Clipboard grows matching APIs — coordinate both repos.

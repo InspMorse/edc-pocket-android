@@ -22,9 +22,12 @@ class MainActivity : ComponentActivity() {
         val store = SettingsStore(this)
         val outboxStore = OutboxStore(this)
         val client = EdcClient(contentResolver)
+        val syncCache = SyncCache(this)
+        val syncCoordinator = SyncCoordinator(client, syncCache)
         val outboxProcessor = OutboxProcessor(client, outboxStore)
         val hostConnector = HostConnector(client)
         val networkMonitor = NetworkMonitor(this)
+        val connectionDoctor = ConnectionDoctor(client)
         lifecycleScope.launch {
             val settings = store.settings.first()
             PollScheduler.apply(this@MainActivity, settings.backgroundPoll)
@@ -36,10 +39,12 @@ class MainActivity : ComponentActivity() {
                 settings = settings,
                 store = store,
                 client = client,
+                syncCoordinator = syncCoordinator,
                 outboxStore = outboxStore,
                 outboxProcessor = outboxProcessor,
                 hostConnector = hostConnector,
                 networkMonitor = networkMonitor,
+                connectionDoctor = connectionDoctor,
                 launchAction = launchAction,
                 onLaunchActionHandled = { launchActionState.value = LaunchAction.NONE },
             )

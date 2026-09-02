@@ -38,6 +38,29 @@ class OutboxStore(private val context: Context) {
         }
     }
 
+    suspend fun updateFailure(
+        id: String,
+        attemptCount: Int,
+        lastError: String,
+        nextRetryAt: Long,
+    ) {
+        context.outboxDataStore.edit { prefs ->
+            val current = OutboxItem.listFromJson(prefs[itemsKey].orEmpty())
+            val updated = current.map { item ->
+                if (item.id == id) {
+                    item.copy(
+                        attemptCount = attemptCount,
+                        lastError = lastError,
+                        nextRetryAt = nextRetryAt,
+                    )
+                } else {
+                    item
+                }
+            }
+            prefs[itemsKey] = OutboxItem.listToJson(updated)
+        }
+    }
+
     suspend fun clear() {
         val current = items.first()
         current.forEach { item ->

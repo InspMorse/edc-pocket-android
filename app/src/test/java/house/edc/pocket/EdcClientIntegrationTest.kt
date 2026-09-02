@@ -79,6 +79,26 @@ class EdcClientIntegrationTest {
     }
 
     @Test
+    fun fetchEndpoint_sendsConditionalHeaders() {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(304)
+                .addHeader("ETag", "\"clip-v2\""),
+        )
+        val response = client.fetchEndpoint(
+            baseUrl(),
+            "/api/clipboard",
+            "Mike",
+            ifNoneMatch = "\"clip-v1\"",
+            ifModifiedSince = "Wed, 01 Sep 2026 00:00:00 GMT",
+        )
+        val req = server.takeRequest()
+        assertEquals("\"clip-v1\"", req.getHeader("If-None-Match"))
+        assertEquals("Wed, 01 Sep 2026 00:00:00 GMT", req.getHeader("If-Modified-Since"))
+        assertTrue(response.notModified)
+    }
+
+    @Test
     fun sendText_postsToClipboard() {
         server.enqueue(MockResponse().setResponseCode(200))
         client.sendText(baseUrl(), "Mike", "test clip")
