@@ -32,10 +32,10 @@ Mike and Mhairi can read and write the **house clipboard**, manage the shared **
 
 | | |
 |---|---|
-| **Current release** | **v1.7** (Phase 10) |
-| **Shipped** | Phases **0–10** — foundation through smarter house |
-| **Next milestone** | Phase **11** → **1.9** |
-| **Through Phase 12** | **20** remaining items (11.1–12.10) |
+| **Current release** | **v1.9** (Phase 11) |
+| **Shipped** | Phases **0–11** — foundation through list/incoming superpowers |
+| **Next milestone** | Phase **12** → **2.0** |
+| **Through Phase 12** | **10** remaining items (12.1–12.10) |
 | **Carried forward** | 5.6 FCM push → **8.3** (needs host API) |
 
 **Branch:** `cursor/finish-edc-pocket-android-f18a` · **PR:** [#2](https://github.com/InspMorse/edc-pocket-android/pull/2)
@@ -53,10 +53,10 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 | **8** | 1.3–1.4 | Always in sync | 8.1–8.9 (+ 5.6) | **Done** |
 | **9** | 1.5–1.6 | More surfaces | 9.1–9.10 | **Done** |
 | **10** | 1.7–1.8 | Smarter house | 10.1–10.10 | **Done** |
-| **11** | 1.9–2.0 | Beyond clipboard | 11.1–11.10 | **Next** |
-| **12** | 2.x | Trust at scale | 12.1–12.10 | Planned |
+| **11** | 1.9–2.0 | Beyond clipboard | 11.1–11.10 | **Done** |
+| **12** | 2.x | Trust at scale | 12.1–12.10 | **Next** |
 
-**Spine:** `Phase 11 (1.9) → 12 (2.0)`
+**Spine:** `Phase 12 (2.0)`
 
 **Host-dependent batches** (coordinate Everyday Clipboard host repo):
 
@@ -261,28 +261,28 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 
 ---
 
-## Phase 11 — Beyond clipboard (**next** → 1.9–2.0)
+## Phase 11 — Beyond clipboard (done → 1.9)
 
 **Goal:** List and Incoming become household utilities, not side features.
 
 | # | Item | Status |
 |---|------|--------|
-| 11.1 | Todo notes, due dates, and sub-items (host API permitting) | Pending · host |
-| 11.2 | Recurring list items (“milk every week”) | Pending |
-| 11.3 | Shopping categories / aisles view | Pending |
-| 11.4 | Link a todo to a clip (“buy ingredients” → recipe URL) | Pending |
-| 11.5 | Incoming — video upload, PDF preview, audio inline | Pending · host |
-| 11.6 | Document scan → Incoming (ML Kit) | Pending |
-| 11.7 | Barcode / QR scan → send to clip or list | Pending |
-| 11.8 | Bulk Incoming actions (select, download zip, delete on host) | Pending · host |
-| 11.9 | Session gallery view — photos grouped by session folder | Pending |
-| 11.10 | Markdown or code-block rendering in clips | Pending |
+| 11.1 | Todo notes, due dates, and sub-items (host API permitting) | Done · host |
+| 11.2 | Recurring list items (“milk every week”) | Done |
+| 11.3 | Shopping categories / aisles view | Done |
+| 11.4 | Link a todo to a clip (“buy ingredients” → recipe URL) | Done |
+| 11.5 | Incoming — video upload, PDF preview, audio inline | Done · host |
+| 11.6 | Document scan → Incoming (ML Kit) | Done |
+| 11.7 | Barcode / QR scan → send to clip or list | Done |
+| 11.8 | Bulk Incoming actions (select, download zip, delete on host) | Done · host |
+| 11.9 | Session gallery view — photos grouped by session folder | Done |
+| 11.10 | Markdown or code-block rendering in clips | Done |
 
 **Exit criteria:** A grocery run uses only the List tab; a event photo dump uses session gallery end-to-end.
 
 ---
 
-## Phase 12 — Trust at scale (2.x)
+## Phase 12 — Trust at scale (**next** → 2.x)
 
 **Goal:** Safe for years of daily use; observable when things go wrong.
 
@@ -338,18 +338,16 @@ Nothing off the table — park here until a host API or strong user pull exists.
 | **1.1** | Phase 7 | Shipped |
 | **1.3** | Phase 8 | Shipped |
 | **1.5** | Phase 9 | Shipped |
-| **1.7** | Phase 10 | **Current** |
-| **1.9–2.0** | Phase 11 | **Next** |
-| **2.x** | Phase 12 | Planned |
+| **1.7** | Phase 10 | Shipped |
+| **1.9** | Phase 11 | **Current** |
+| **2.x** | Phase 12 | **Next** |
 
 Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 
 ### Full remaining checklist (10.1 → 12.10)
 
 <details>
-<summary>20 items — expand to scan</summary>
-
-**Phase 11:** 11.1 todo notes/dates · 11.2 recurring · 11.3 categories · 11.4 todo↔clip link · 11.5 video/PDF/audio · 11.6 doc scan · 11.7 barcode · 11.8 bulk Incoming · 11.9 session gallery · 11.10 markdown clips  
+<summary>10 items — expand to scan</summary>
 
 **Phase 12:** 12.1 audit log · 12.2 rate limits · 12.3 export · 12.4 reset · 12.5 golden tests · 12.6 beta channel · 12.7 feature flags · 12.8 telemetry · 12.9 security cadence · 12.10 API 2.0 policy  
 
@@ -391,7 +389,7 @@ Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 **Sequential spine (required order for major releases)**
 
 ```
-v1.7 (now) → Phase 11 (1.9) → 12 (2.0)
+v1.9 (now) → Phase 12 (2.0)
 ```
 
 **Parallel tracks** — can overlap now that **1.5** shipped:
@@ -404,12 +402,12 @@ v1.7 (now) → Phase 11 (1.9) → 12 (2.0)
 | **Surfaces** | 9 | Widget, tile, voice, Wear, NFC |
 | **House** | 10 | Multi-host, discovery, dashboard |
 
-**Recommended batches (Phase 11 first)**
+**Recommended batches (Phase 12 first)**
 
 | Batch | Items | Why |
 |-------|-------|-----|
-| List superpowers | 11.1, 11.2, 11.3 | Notes, recurring, categories *(host)* |
-| Incoming media | 11.5, 11.6, 11.9 | Video/PDF, doc scan, session gallery |
-| Clip richness | 11.4, 11.7, 11.10 | Todo↔clip links, barcode, markdown |
+| Trust & ops | 12.1, 12.3, 12.4 | Audit log, export, reset |
+| Quality | 12.5, 12.6, 12.9 | Golden tests, beta channel, security cadence |
+| Policy | 12.7, 12.8, 12.10 | Feature flags, telemetry, API 2.0 |
 
 Host-dependent unlock: **8.3–8.4**, **10.2/10.4/10.6**, and much of **11** move fastest when Everyday Clipboard grows matching APIs — coordinate both repos.

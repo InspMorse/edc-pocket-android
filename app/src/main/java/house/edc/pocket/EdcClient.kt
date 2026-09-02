@@ -232,12 +232,20 @@ class EdcClient(
         }
     }
 
-    private fun guessMime(name: String): String = when {
+    internal fun guessMime(name: String): String = when {
         name.endsWith(".png", true) -> "image/png"
         name.endsWith(".webp", true) -> "image/webp"
         name.endsWith(".gif", true) -> "image/gif"
         name.endsWith(".heic", true) -> "image/heic"
-        else -> "image/jpeg"
+        name.endsWith(".pdf", true) -> "application/pdf"
+        name.endsWith(".mp4", true) -> "video/mp4"
+        name.endsWith(".mov", true) -> "video/quicktime"
+        name.endsWith(".webm", true) -> "video/webm"
+        name.endsWith(".mp3", true) -> "audio/mpeg"
+        name.endsWith(".m4a", true) -> "audio/mp4"
+        name.endsWith(".wav", true) -> "audio/wav"
+        name.endsWith(".jpg", true) || name.endsWith(".jpeg", true) -> "image/jpeg"
+        else -> "application/octet-stream"
     }
 
     fun uploadImage(
@@ -247,16 +255,50 @@ class EdcClient(
         filename: String,
         session: String = "",
     ) {
+        val mime = resolver.getType(uri) ?: "image/jpeg"
+        uploadBytes(base, identity, uri, filename, session, mime)
+    }
+
+    fun uploadFile(
+        base: String,
+        identity: String,
+        uri: Uri,
+        filename: String,
+        session: String = "",
+        mime: String? = null,
+    ) {
+        val resolvedMime = mime ?: resolver.getType(uri) ?: guessMime(filename)
+        uploadBytes(base, identity, uri, filename, session, resolvedMime)
+    }
+
+    fun uploadBytes(
+        base: String,
+        identity: String,
+        uri: Uri,
+        filename: String,
+        session: String = "",
+        mime: String,
+    ) {
         val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
-            ?: error("Could not read image")
+            ?: error("Could not read file")
+        uploadRawBytes(base, identity, bytes, filename, session, mime)
+    }
+
+    fun uploadRawBytes(
+        base: String,
+        identity: String,
+        bytes: ByteArray,
+        filename: String,
+        session: String = "",
+        mime: String,
+    ) {
         val sessionClean = session.trim().trim('/', '\\')
-        val baseName = filename.ifBlank { "photo.jpg" }
+        val baseName = filename.ifBlank { "file.bin" }
         val name = if (sessionClean.isEmpty()) {
             baseName
         } else {
             "$sessionClean/${baseName.substringAfterLast('/')}"
         }
-        val mime = resolver.getType(uri) ?: "image/jpeg"
         val paths = listOf("/api/drop", "/api/incoming", "/api/upload", "/drop", "/incoming")
         var last = "Upload failed"
         for (path in paths) {
@@ -280,6 +322,66 @@ class EdcClient(
             if (code != 404 && code != 405) break
         }
         error(last)
+    }
+
+    fun updateTodoMeta(
+        base: String,
+        identity: String,
+        id: String,
+        note: String = "",
+        dueDate: String = "",
+        category: String = "",
+        linkedClipUrl: String = "",
+    ) {
+        val fields = buildList {
+            if (note.isNotBlank()) add("\"note\":${note.json()}")
+            if (dueDate.isNotBlank()) add("\"due_date\":${dueDate.json()}")
+            if (category.isNotBlank()) add("\"category\":${category.json()}")
+            if (linkedClipUrl.isNotBlank()) add("\"linked_clip_url\":${linkedClipUrl.json()}")
+        }
+        if (fields.isEmpty()) return
+        val body = """{${fields.joinToString(",")},"from":${identity.json()}}"""
+            .toRequestBody(jsonType)
+        val patch = Request.Builder()
+            .url(url(base, "/api/todo/${id.encode()}", identity))
+            .addHeader("from", identity)
+            .patch(body)
+            .build()
+        http.newCall(patch).execute().use { res ->
+            if (res.isSuccessful) return
+            if (res.code != 404 && res.code != 405) error("Update failed (${res.code})")
+        }
+        post(base, "/api/todo", identity, body)
+    }
+
+    fun deleteIncoming(base: String, identity: String, drop: DropItem) {
+        val id = drop.id.ifBlank { drop.name }
+        val paths = listOf(
+            "/api/incoming/${id.encode()}",
+            "/api/drop/${id.encode()}",
+        )
+        var last = "Delete failed"
+        var failed = false
+        for (path in paths) {
+            val req = Request.Builder()
+                .url(url(base, path, identity))
+                .addHeader("from", identity)
+                .delete()
+                .build()
+            http.newCall(req).execute().use { res ->
+                if (res.isSuccessful) return
+                last = "Delete failed (${res.code})"
+                if (res.code != 404 && res.code != 405) failed = true
+            }
+            if (failed) break
+        }
+        error(last)
+    }
+
+    fun deleteIncomingMany(base: String, identity: String, drops: List<DropItem>) {
+        drops.forEach { drop ->
+            runCatching { deleteIncoming(base, identity, drop) }
+        }
     }
 
     fun incomingOpenUrl(base: String, drop: DropItem): String? {

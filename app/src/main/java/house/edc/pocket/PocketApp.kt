@@ -149,6 +149,8 @@ fun PocketApp(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pinStore = remember(context) { PinStore(context) }
+    val todoExtrasStore = remember(context) { TodoExtrasStore(context) }
+    val todoExtras by todoExtrasStore.extras.collectAsState(initial = emptyMap())
     val pinnedClipKeys by pinStore.pinnedClipKeys.collectAsState(initial = emptySet())
     val pinnedTodoIds by pinStore.pinnedTodoIds.collectAsState(initial = emptySet())
     var hostHealth by remember { mutableStateOf<HostHealth?>(null) }
@@ -192,6 +194,9 @@ fun PocketApp(
         val displayIdentity = when {
             settings.guestActive -> "${settings.guestIdentity} (guest)"
             else -> settings.identity
+        }
+        val enrichedTodos = remember(snapshot.todos, todoExtras) {
+            enrichTodos(snapshot.todos, todoExtras)
         }
         val dashboardUrl = hostHealth?.dashboardUrl?.takeIf { it.isNotBlank() }
             ?: hostHealth?.linkTemplates?.dashboardBase?.takeIf { it.isNotBlank() }
@@ -325,6 +330,35 @@ fun PocketApp(
             )
         }
 
+        suspend fun uploadRawFiles(files: List<Pair<ByteArray, String>>, session: String) {
+            if (files.isEmpty()) return
+            uploadProgress = UploadProgress(0, files.size)
+            var sent = 0
+            files.forEachIndexed { index, (bytes, name) ->
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        client.uploadRawBytes(
+                            settings.baseUrl,
+                            settings.effectiveIdentity,
+                            bytes,
+                            name,
+                            session,
+                            client.guessMime(name),
+                        )
+                    }.isSuccess
+                }
+                if (ok) sent++
+                uploadProgress = UploadProgress(index + 1, files.size)
+            }
+            uploadProgress = null
+            if (sent > 0) {
+                snackbar.showSnackbar(
+                    if (sent == 1) "File sent to Incoming" else "$sent files sent",
+                )
+                refresh()
+            }
+        }
+
         suspend fun uploadPhotos(uris: List<Uri>, session: String) {
             if (uris.isEmpty()) return
             uploadProgress = UploadProgress(0, uris.size)
@@ -333,7 +367,7 @@ fun PocketApp(
                 val name = uri.lastPathSegment ?: "photo_${index + 1}.jpg"
                 val ok = withContext(Dispatchers.IO) {
                     runCatching {
-                        client.uploadImage(
+                        client.uploadFile(
                             settings.baseUrl,
                             settings.effectiveIdentity,
                             uri,
@@ -685,7 +719,12 @@ fun PocketApp(
                         VerticalDivider()
                         ListPane(
                             modifier = Modifier.weight(1f).fillMaxHeight(),
-                            todos = snapshot.todos,
+                            todos = enrichedTodos,
+                            latestClipUrl = firstUrl(snapshot.latest?.text.orEmpty()).orEmpty(),
+                            todoExtras = todoExtras,
+                            todoExtrasStore = todoExtrasStore,
+                            client = client,
+                            settings = settings,
                             listEnabled = caps.todo,
                             shareListEnabled = caps.todoText,
                             deleteEnabled = caps.todoDelete,
@@ -733,6 +772,25 @@ fun PocketApp(
                                             item.id,
                                             next,
                                         )
+                                    }
+                                    if (next) {
+                                        val rule = RecurrenceRule.from(item.recurrence)
+                                        val followUp = recurrenceFollowUpText(item.text, rule)
+                                        if (followUp != null) {
+                                            sendWithOutbox(
+                                                okMessage = null,
+                                                enqueueItem = {
+                                                    OutboxItem(kind = OutboxKind.LIST, text = followUp)
+                                                },
+                                                send = {
+                                                    client.addTodo(
+                                                        settings.baseUrl,
+                                                        settings.effectiveIdentity,
+                                                        followUp,
+                                                    )
+                                                },
+                                            )
+                                        }
                                     }
                                 }
                             },
@@ -834,7 +892,12 @@ fun PocketApp(
                         },
                     )
                     PocketTab.LIST -> ListPane(
-                        todos = snapshot.todos,
+                        todos = enrichedTodos,
+                        latestClipUrl = firstUrl(snapshot.latest?.text.orEmpty()).orEmpty(),
+                        todoExtras = todoExtras,
+                        todoExtrasStore = todoExtrasStore,
+                        client = client,
+                        settings = settings,
                         listEnabled = caps.todo,
                         shareListEnabled = caps.todoText,
                         deleteEnabled = caps.todoDelete,
@@ -882,6 +945,25 @@ fun PocketApp(
                                         item.id,
                                         next,
                                     )
+                                }
+                                if (next) {
+                                    val rule = RecurrenceRule.from(item.recurrence)
+                                    val followUp = recurrenceFollowUpText(item.text, rule)
+                                    if (followUp != null) {
+                                        sendWithOutbox(
+                                            okMessage = null,
+                                            enqueueItem = {
+                                                OutboxItem(kind = OutboxKind.LIST, text = followUp)
+                                            },
+                                            send = {
+                                                client.addTodo(
+                                                    settings.baseUrl,
+                                                    settings.effectiveIdentity,
+                                                    followUp,
+                                                )
+                                            },
+                                        )
+                                    }
                                 }
                             }
                         },
@@ -973,6 +1055,72 @@ fun PocketApp(
                         },
                         onUploadMultiple = { uris, session ->
                             scope.launch { uploadPhotos(uris, session) }
+                        },
+                        onUploadBytes = { bytes, name, session ->
+                            scope.launch { uploadRawFiles(listOf(bytes to name), session) }
+                        },
+                        onBarcodeScanned = { code ->
+                            scope.launch {
+                                val trimmed = code.trim()
+                                if (trimmed.isBlank()) return@launch
+                                sendWithOutbox(
+                                    okMessage = "Sent scan to clipboard",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.CLIP, text = trimmed)
+                                    },
+                                    send = {
+                                        client.sendText(
+                                            settings.baseUrl,
+                                            settings.effectiveIdentity,
+                                            trimmed,
+                                        )
+                                    },
+                                )
+                            }
+                        },
+                        onBulkDownload = { drops ->
+                            scope.launch {
+                                loading = true
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val files = drops.mapNotNull { drop ->
+                                            val (bytes, _) = client.downloadIncoming(
+                                                settings.baseUrl,
+                                                settings.effectiveIdentity,
+                                                drop,
+                                            )
+                                            drop.name to bytes
+                                        }
+                                        buildIncomingZip(files)
+                                    }
+                                }
+                                loading = false
+                                result.fold(
+                                    onSuccess = { zip ->
+                                        IncomingFiles.shareBytes(
+                                            context,
+                                            "edc-incoming.zip",
+                                            zip,
+                                            "application/zip",
+                                        )
+                                    },
+                                    onFailure = {
+                                        snackbar.showSnackbar(it.message ?: "Download failed")
+                                    },
+                                )
+                            }
+                        },
+                        onBulkDelete = { drops ->
+                            scope.launch {
+                                hostCall("Removed ${drops.size} files") {
+                                    client.deleteIncomingMany(
+                                        settings.baseUrl,
+                                        settings.effectiveIdentity,
+                                        drops,
+                                    )
+                                }
+                                refresh()
+                            }
                         },
                         onOpenDrop = { drop ->
                             val url = client.incomingOpenUrl(settings.baseUrl, drop)
@@ -1329,6 +1477,11 @@ private fun ClipPane(
 private fun ListPane(
     modifier: Modifier = Modifier,
     todos: List<TodoItem>,
+    latestClipUrl: String,
+    todoExtras: Map<String, TodoExtra>,
+    todoExtrasStore: TodoExtrasStore,
+    client: EdcClient,
+    settings: EdcSettings,
     listEnabled: Boolean,
     shareListEnabled: Boolean,
     deleteEnabled: Boolean,
@@ -1348,11 +1501,41 @@ private fun ListPane(
     onShareList: () -> Unit,
     onOpenDashboard: (TodoItem) -> Unit,
 ) {
+    val scope = rememberCoroutineScope()
+    val listContext = LocalContext.current
     var draft by rememberSaveable { mutableStateOf("") }
+    var editingTodo by remember { mutableStateOf<TodoItem?>(null) }
     val filtered = filterTodosByPerson(todos, personFilter, identity)
     val sorted = sortTodos(filtered, sortMode, pinnedTodoIds, identity)
     val open = sorted.filter { !it.done }
     val done = sorted.filter { it.done }
+    editingTodo?.let { item ->
+        TodoExtraEditorDialog(
+            item = item,
+            extra = todoExtras[item.id] ?: TodoExtra(),
+            latestClipUrl = latestClipUrl,
+            onDismiss = { editingTodo = null },
+            onSave = { extra ->
+                scope.launch {
+                    todoExtrasStore.save(item.id, extra)
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            client.updateTodoMeta(
+                                settings.baseUrl,
+                                settings.effectiveIdentity,
+                                item.id,
+                                note = extra.note,
+                                dueDate = extra.dueDate,
+                                category = extra.category,
+                                linkedClipUrl = extra.linkedClipUrl,
+                            )
+                        }
+                    }
+                }
+                editingTodo = null
+            },
+        )
+    }
     Column(modifier = modifier.fillMaxSize()) {
         if (listEnabled) {
             SendField(
@@ -1430,22 +1613,50 @@ private fun ListPane(
             if (todos.isEmpty()) {
                 item { EmptyHint(listEmptyMessage(personFilter, identity)) }
             }
-            items(open, key = { it.id }) { item ->
-                SwipeTodoRow(
-                    enabled = listEnabled,
-                    onComplete = { onToggle(item) },
-                ) {
-                    TodoRow(
-                        item = item,
-                        isPinned = item.id in pinnedTodoIds,
-                        onToggle = onToggle,
-                        onTogglePin = { onTogglePin(item.id) },
-                        onOpenDashboard = if (showDashboardLinks) {
-                            { onOpenDashboard(item) }
-                        } else {
-                            null
-                        },
-                    )
+            if (sortMode == ListSortMode.BY_AISLE) {
+                groupTodosByAisle(open).forEach { (aisle, items) ->
+                    item { SectionLabel(aisle.label) }
+                    items(items, key = { it.id }) { item ->
+                        SwipeTodoRow(
+                            enabled = listEnabled,
+                            onComplete = { onToggle(item) },
+                        ) {
+                            TodoRowRich(
+                                item = item,
+                                isPinned = item.id in pinnedTodoIds,
+                                onToggle = onToggle,
+                                onTogglePin = { onTogglePin(item.id) },
+                                onEdit = { editingTodo = item },
+                                onOpenLinkedClip = { url -> openUrl(listContext, url) },
+                                onOpenDashboard = if (showDashboardLinks) {
+                                    { onOpenDashboard(item) }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(open, key = { it.id }) { item ->
+                    SwipeTodoRow(
+                        enabled = listEnabled,
+                        onComplete = { onToggle(item) },
+                    ) {
+                        TodoRowRich(
+                            item = item,
+                            isPinned = item.id in pinnedTodoIds,
+                            onToggle = onToggle,
+                            onTogglePin = { onTogglePin(item.id) },
+                            onEdit = { editingTodo = item },
+                            onOpenLinkedClip = { url -> openUrl(listContext, url) },
+                            onOpenDashboard = if (showDashboardLinks) {
+                                { onOpenDashboard(item) }
+                            } else {
+                                null
+                            },
+                        )
+                    }
                 }
             }
             if (done.isNotEmpty()) {
@@ -1454,11 +1665,12 @@ private fun ListPane(
                     SectionLabel("Done")
                 }
                 items(done, key = { it.id }) { item ->
-                    TodoRow(
+                    TodoRowRich(
                         item = item,
                         isPinned = item.id in pinnedTodoIds,
                         onToggle = onToggle,
                         onTogglePin = { onTogglePin(item.id) },
+                        onEdit = { editingTodo = item },
                         onDelete = if (deleteEnabled) onDelete else null,
                         onOpenDashboard = if (showDashboardLinks) {
                             { onOpenDashboard(item) }
@@ -1488,6 +1700,10 @@ private fun SendPane(
     onSendList: (String) -> Unit,
     onUpload: (Uri, String, String) -> Unit,
     onUploadMultiple: (List<Uri>, String) -> Unit,
+    onUploadBytes: (ByteArray, String, String) -> Unit,
+    onBarcodeScanned: (String) -> Unit,
+    onBulkDownload: (List<DropItem>) -> Unit,
+    onBulkDelete: (List<DropItem>) -> Unit,
     onOpenDrop: (DropItem) -> Unit,
     onShareDrop: (DropItem) -> Unit,
     onSaveDrop: (DropItem) -> Unit,
@@ -1495,9 +1711,37 @@ private fun SendPane(
     onCameraHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
+    val activity = context as? android.app.Activity
     var draft by rememberSaveable { mutableStateOf("") }
     var session by rememberSaveable { mutableStateOf("") }
+    var incomingView by rememberSaveable { mutableStateOf(IncomingViewMode.FLAT.name) }
+    val viewMode = IncomingViewMode.entries.find { it.name == incomingView } ?: IncomingViewMode.FLAT
+    var selectionMode by rememberSaveable { mutableStateOf(false) }
+    var selectedKeys by rememberSaveable { mutableStateOf(setOf<String>()) }
     var captureUri by remember { mutableStateOf<Uri?>(null) }
+    val selectedDrops = drops.filter { dropSelectionKey(it) in selectedKeys }
+    val docScanLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        DocumentScan.readPages(context, result.data).forEach { (name, bytes) ->
+            onUploadBytes(bytes, name, session)
+        }
+    }
+    val barcodeLauncher = rememberLauncherForActivityResult(
+        contract = com.journeyapps.barcodescanner.ScanContract(),
+    ) { result ->
+        result.contents?.let(onBarcodeScanned)
+    }
+    val pickVideo = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) onUpload(uri, uri.lastPathSegment ?: "video.mp4", session)
+    }
+    val pickFile = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) onUpload(uri, uri.lastPathSegment ?: "file.bin", session)
+    }
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val uri = captureUri
         if (ok && uri != null) onUpload(uri, "photo.jpg", session)
@@ -1633,21 +1877,114 @@ private fun SendPane(
             ) {
                 Text("Many")
             }
+            OutlinedButton(
+                onClick = {
+                    pickVideo.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
+                    )
+                },
+                enabled = uploadProgress == null,
+            ) {
+                Text("Video")
+            }
+            OutlinedButton(
+                onClick = { pickFile.launch("*/*") },
+                enabled = uploadProgress == null,
+            ) {
+                Text("File")
+            }
         }
+        IncomingScanRow(
+            onDocumentScan = {
+                if (activity == null) return@IncomingScanRow
+                DocumentScan.start(
+                    activity = activity,
+                    onReady = { sender ->
+                        docScanLauncher.launch(
+                            androidx.activity.result.IntentSenderRequest.Builder(sender).build(),
+                        )
+                    },
+                    onError = { },
+                )
+            },
+            onBarcodeScan = {
+                val options = com.journeyapps.barcodescanner.ScanOptions()
+                    .setPrompt("Scan barcode or QR")
+                    .setBeepEnabled(false)
+                    .setBarcodeImageEnabled(false)
+                    .setCaptureActivity(BarcodeScanActivity::class.java)
+                barcodeLauncher.launch(options)
+            },
+        )
         }
         if (incomingEnabled) {
             SectionLabel("Incoming")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IncomingViewModeChips(
+                    mode = viewMode,
+                    onModeChange = { incomingView = it.name },
+                )
+                TextButton(onClick = {
+                    selectionMode = !selectionMode
+                    if (!selectionMode) selectedKeys = emptySet()
+                }) {
+                    Text(if (selectionMode) "Done" else "Select")
+                }
+            }
+            IncomingBulkBar(
+                selectedCount = selectedKeys.size,
+                onDownloadZip = { onBulkDownload(selectedDrops) },
+                onDelete = {
+                    onBulkDelete(selectedDrops)
+                    selectedKeys = emptySet()
+                    selectionMode = false
+                },
+                onClear = { selectedKeys = emptySet() },
+            )
             if (drops.isEmpty()) {
                 EmptyHint(incomingEmptyMessage())
-            } else {
-                drops.forEach { drop ->
-                    DropCard(
-                        drop = drop,
-                        imageUrl = incomingUrl(drop)?.takeIf { drop.isImage() },
-                        onOpen = { onOpenDrop(drop) },
-                        onShare = { onShareDrop(drop) },
-                        onSave = { onSaveDrop(drop) },
+            } else when (viewMode) {
+                IncomingViewMode.GALLERY, IncomingViewMode.SESSIONS -> {
+                    SessionGalleryGrid(
+                        groups = groupDropsBySession(drops),
+                        incomingUrl = incomingUrl,
+                        selectedIds = selectedKeys,
+                        selectionMode = selectionMode,
+                        onToggleSelect = { drop ->
+                            val key = dropSelectionKey(drop)
+                            selectedKeys = if (key in selectedKeys) {
+                                selectedKeys - key
+                            } else {
+                                selectedKeys + key
+                            }
+                        },
+                        onOpenDrop = onOpenDrop,
                     )
+                }
+                IncomingViewMode.FLAT -> {
+                    drops.forEach { drop ->
+                        RichDropCard(
+                            drop = drop,
+                            imageUrl = incomingUrl(drop)?.takeIf { drop.isImage() },
+                            selected = dropSelectionKey(drop) in selectedKeys,
+                            selectionMode = selectionMode,
+                            onToggleSelect = {
+                                val key = dropSelectionKey(drop)
+                                selectedKeys = if (key in selectedKeys) {
+                                    selectedKeys - key
+                                } else {
+                                    selectedKeys + key
+                                }
+                            },
+                            onOpen = { onOpenDrop(drop) },
+                            onShare = { onShareDrop(drop) },
+                            onSave = { onSaveDrop(drop) },
+                        )
+                    }
                 }
             }
         }
@@ -2260,15 +2597,26 @@ private fun ClipCard(
             .animateContentSize(),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            LinkifiedText(
-                text = shown,
-                color = EdcInk,
-                linkColor = EdcAccent,
-                onOpenUrl = onOpenUrl,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { onCopy(entry.text) },
-            )
+            if (entry.text.contains("```")) {
+                ClipMarkdownBody(
+                    text = shown,
+                    color = EdcInk,
+                    onOpenUrl = onOpenUrl,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCopy(entry.text) },
+                )
+            } else {
+                LinkifiedText(
+                    text = shown,
+                    color = EdcInk,
+                    linkColor = EdcAccent,
+                    onOpenUrl = onOpenUrl,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCopy(entry.text) },
+                )
+            }
             if (long) {
                 TextButton(onClick = { expanded = !expanded }) {
                     Text(if (expanded) "Show less" else "Show more")
@@ -2422,7 +2770,7 @@ private fun SendField(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+internal fun SectionLabel(text: String) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
@@ -2459,7 +2807,7 @@ private fun connectionLabel(
     }
 }
 
-private fun metaLine(from: String, ts: String, extra: String = ""): String =
+internal fun metaLine(from: String, ts: String, extra: String = ""): String =
     listOf(from, formatTs(ts), extra).filter { it.isNotBlank() }.joinToString(" · ")
 
 private fun formatTs(ts: String): String {

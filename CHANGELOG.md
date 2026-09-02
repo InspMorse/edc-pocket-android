@@ -7,7 +7,21 @@ Versioning: **0.x** = pre-release phases · **1.0** = Phase 6 trust release · *
 
 ---
 
-## [1.7.0] — Phase 10
+## [1.9.0] — Phase 11
+
+### Added
+
+- Todo notes, due dates, sub-items, and recurrence (host JSON + local overlay)
+- “By aisle” list sort with grocery category inference
+- Link list items to clip URLs (including “link latest clip”)
+- Incoming video/file upload, PDF/audio type badges
+- ML Kit document scan → Incoming
+- Barcode/QR scan → send to clipboard
+- Bulk Incoming select — download zip, batch delete
+- Session gallery grid grouped by session folder
+- Markdown code blocks in clip cards
+
+---
 
 ### Added
 

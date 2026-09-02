@@ -87,6 +87,14 @@
             android:windowSoftInputMode="stateAlwaysHidden" />
 
         <activity
+            android:name=".BarcodeScanActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:stateNotNeeded="true"
+            android:theme="@style/zxing_CaptureTheme"
+            android:windowSoftInputMode="stateAlwaysHidden" />
+
+        <activity
             android:name=".NfcDispatchActivity"
             android:exported="true"
             android:launchMode="singleTop"

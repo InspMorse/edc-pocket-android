@@ -4,6 +4,7 @@ enum class ListSortMode(val label: String) {
     OPEN_FIRST("Open first"),
     BY_DATE("Newest"),
     BY_PERSON("By person"),
+    BY_AISLE("By aisle"),
 }
 
 enum class ListPersonFilter(val label: String) {
@@ -29,6 +30,13 @@ internal fun sortTodos(
         ListSortMode.BY_PERSON -> todos.sortedWith(
             compareBy<TodoItem>({ pinRank(it.id) }, { it.from.lowercase() }, { it.done })
                 .then(byNewest),
+        )
+        ListSortMode.BY_AISLE -> todos.sortedWith(
+            compareBy<TodoItem>(
+                { pinRank(it.id) },
+                { GroceryAisle.infer(it.text, it.category).ordinal },
+                { it.done },
+            ).then(byNewest),
         )
     }
 }

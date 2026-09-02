@@ -157,12 +157,37 @@ private fun JSONObject.toClip(): ClipEntry? {
 private fun JSONObject.toTodo(): TodoItem? {
     val text = str("text", "title", "item", "content", "value", "body")
     if (text.isEmpty()) return null
+    val subs = buildList {
+        val subArr = listOf("sub_items", "subitems", "children").firstNotNullOfOrNull { key ->
+            optJSONArray(key)?.takeIf { it.length() > 0 }
+        }
+        subArr?.let { arr ->
+            for (i in 0 until arr.length()) {
+                when (val value = arr.opt(i)) {
+                    is JSONObject -> add(
+                        TodoSubItem(
+                            text = value.str("text", "title", "item"),
+                            done = value.bool("done", "checked", "complete"),
+                        ),
+                    )
+                    is String -> if (value.isNotBlank()) add(TodoSubItem(value))
+                }
+            }
+        }
+    }
     return TodoItem(
         id = str("id", "_id", "uuid", fallback = UUID.randomUUID().toString()),
         text = text,
         done = bool("done", "checked", "complete", "completed"),
         from = str("from", "by", "user", "as", "identity", "who"),
         ts = str("ts", "time", "timestamp", "at", "created", "created_at", "date"),
+        note = str("note", "notes", "description"),
+        dueDate = str("due_date", "due", "dueDate"),
+        category = str("category", "aisle", "section"),
+        linkedClipUrl = str("linked_clip_url", "clip_url", "linked_clip", "clip_link"),
+        linkedClipText = str("linked_clip_text", "clip_text"),
+        subItems = subs,
+        recurrence = str("recurrence", "repeat", "recurring"),
     )
 }
 
