@@ -10,6 +10,8 @@ Open this folder in **Android Studio** and build an APK. The native app talks HT
 4. Install `app/build/outputs/apk/debug/app-debug.apk` on the phone (allow unknown sources).
 5. Open **EDC pocket**. Pick **Mike** or **Mhairi**. Tap **Home Wi-Fi**. Test connection.
 
+From the command line: `./gradlew assembleDebug`. The APK lands in the same `app/build/outputs/apk/debug/` folder.
+
 ## What it does
 
 - **Clip** — latest house clipboard, copy, send (manual only)
