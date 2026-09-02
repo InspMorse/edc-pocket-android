@@ -136,6 +136,154 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 | 6.7 | Privacy / permissions audit in README |
 | 6.8 | Crash reporting (optional) |
 
+**Exit criteria:** Tagged **1.0** release APK; CI green on every PR; integration tests cover host client flows.
+
+---
+
+## Phase 7 — Everyday delight
+
+**Goal:** First-run and daily use feel obvious, fast, and pleasant — not just functional.
+
+| # | Item |
+|---|------|
+| 7.1 | First-run onboarding (identity → host → test → optional widget/tile) |
+| 7.2 | Swipe actions on clip rows (copy / share / dashboard) |
+| 7.3 | Swipe-to-complete on open todos |
+| 7.4 | Rich clip previews — link unfurl, phone → dial, address → maps |
+| 7.5 | Pin / star clips and list items (local or host-backed if API exists) |
+| 7.6 | List sorting & filters (open first, by person, by date) |
+| 7.7 | Better empty states and error copy (“host asleep”, “Tailscale off”) |
+| 7.8 | Material You / host accent colour sync (if host exposes theme) |
+| 7.9 | Tablet & foldable two-pane layout (clip + list side by side) |
+| 7.10 | Haptic & animation polish pass |
+
+**Exit criteria:** A new phone owner reaches “copy latest clip” in under 60 seconds without reading docs.
+
+---
+
+## Phase 8 — Always in sync
+
+**Goal:** Data feels live; outages are invisible; bandwidth stays low.
+
+| # | Item |
+|---|------|
+| 8.1 | Local Room cache with explicit “last synced” timestamps |
+| 8.2 | Conditional fetch (`ETag` / `If-Modified-Since` when host supports) |
+| 8.3 | Push via FCM — host notifies phone of clip/list/incoming changes (5.6) |
+| 8.4 | SSE or WebSocket stream as alternative to polling |
+| 8.5 | Smarter background sync — event-driven + adaptive intervals |
+| 8.6 | Outbox v2 — per-item retry, exponential backoff, failure reasons |
+| 8.7 | Conflict hints when host data changed while editing offline |
+| 8.8 | Connection doctor in Settings (latency, per-endpoint status, export debug log) |
+| 8.9 | Staleness UI — “cached 12 min ago” on every tab |
+
+**Exit criteria:** With FCM or SSE enabled, clip updates appear without opening the app; airplane-mode sends still drain the outbox reliably.
+
+---
+
+## Phase 9 — More surfaces
+
+**Goal:** House clipboard reachable from anywhere on the phone — not only inside the app.
+
+| # | Item |
+|---|------|
+| 9.1 | Widget v2 — configurable size, show open todo count, tap filter |
+| 9.2 | Lock screen widget / glance (where OS allows) |
+| 9.3 | Quick Settings tiles — open list, snap photo to Incoming |
+| 9.4 | Persistent “connected” notification with latest clip preview (optional) |
+| 9.5 | Share target v2 — remember last destination; skip chooser option |
+| 9.6 | App Actions / voice — “send to house list”, “copy house clipboard” |
+| 9.7 | Tasker / MacroDroid / automation intent API (documented) |
+| 9.8 | Wear OS tile or complication — copy latest |
+| 9.9 | NFC tag at the door — open app or copy latest |
+| 9.10 | Direct share shortcuts per session folder |
+
+**Exit criteria:** Three one-tap paths to “copy latest” exist outside the launcher (widget, tile, voice or NFC).
+
+---
+
+## Phase 10 — Smarter house
+
+**Goal:** Multiple hosts, zero-config discovery, and tighter coupling with the house dashboard.
+
+| # | Item |
+|---|------|
+| 10.1 | Multiple host profiles (home, holiday, parents) with quick switcher |
+| 10.2 | mDNS / Bonjour host discovery on LAN (“EDC on this network”) |
+| 10.3 | Tailscale MagicDNS hostname instead of raw IP |
+| 10.4 | QR pairing — scan dashboard QR to set Custom URL + trust host |
+| 10.5 | Embedded dashboard WebView panel (optional tab or sheet) |
+| 10.6 | Host branding sync — name, logo, accent from capabilities |
+| 10.7 | Geofence or “at home” hint (Wi‑Fi SSID + optional location) |
+| 10.8 | Guest / temporary identity with expiry |
+| 10.9 | Biometric lock for app or sensitive clips |
+| 10.10 | Certificate pinning for HTTPS hosts |
+
+**Exit criteria:** Visiting a friend’s house EDC instance is a QR scan, not manual URL editing.
+
+---
+
+## Phase 11 — Beyond clipboard
+
+**Goal:** List and Incoming become household utilities, not side features.
+
+| # | Item |
+|---|------|
+| 11.1 | Todo notes, due dates, and sub-items (host API permitting) |
+| 11.2 | Recurring list items (“milk every week”) |
+| 11.3 | Shopping categories / aisles view |
+| 11.4 | Link a todo to a clip (“buy ingredients” → recipe URL) |
+| 11.5 | Incoming — video upload, PDF preview, audio inline |
+| 11.6 | Document scan → Incoming (ML Kit) |
+| 11.7 | Barcode / QR scan → send to clip or list |
+| 11.8 | Bulk Incoming actions (select, download zip, delete on host) |
+| 11.9 | Session gallery view — photos grouped by session folder |
+| 11.10 | Markdown or code-block rendering in clips |
+
+**Exit criteria:** A grocery run uses only the List tab; a event photo dump uses session gallery end-to-end.
+
+---
+
+## Phase 12 — Trust at scale
+
+**Goal:** Safe for years of daily use; observable when things go wrong.
+
+| # | Item |
+|---|------|
+| 12.1 | Structured audit log (who sent what, when — local or host) |
+| 12.2 | Rate-limit and abuse hints from host |
+| 12.3 | Data export (settings + cached clips/todos) |
+| 12.4 | Clear-data / reset without orphan workers |
+| 12.5 | Screenshot / golden UI tests for regressions |
+| 12.6 | Beta channel (Firebase App Distribution or Play internal) |
+| 12.7 | Feature flags driven by host capabilities |
+| 12.8 | Optional anonymised crash + connectivity telemetry (opt-in) |
+| 12.9 | Dependency & security update cadence documented |
+| 12.10 | **2.0** — breaking-change policy for host API versions |
+
+**Exit criteria:** You can diagnose “why didn’t my send arrive?” from in-app logs without adb.
+
+---
+
+## Moonshots & wild ideas
+
+Nothing off the table — park here until a host API or strong user pull exists.
+
+| Idea | Why it’s interesting |
+|------|----------------------|
+| **Reverse push** — host asks phone to snap a photo or share location | “What’s in the fridge?” from the dashboard |
+| **House ↔ phone clip sync** — optional mirror of system clipboard when at home | True “unified clipboard” without manual send |
+| **Live Activities / Dynamic Island style** — trip mode showing open list count | Shopping trip awareness |
+| **Car mode** — voice-only list tick-off (Android Auto constraints) | Hands full at shops |
+| **Shared clip reactions** 👍 on a link someone pasted | Lightweight social layer on the house clip |
+| **Scheduled clip** — “show this on the house dashboard at 7am” | Reminders without a separate app |
+| **Clip templates** — “add to list: milk, bread, eggs” macro | Faster shopping |
+| **Incoming → print** — send to house printer if host exposes it | Recipes, tickets |
+| **Home-screen clip stack** — scroll recent clips in widget | History without opening app |
+| **Cross-house relay** — forward clip from home EDC to holiday EDC | Multi-property households |
+| **Desktop pairing** — same identity on Windows/Mac via companion | Beyond Android |
+| **Offline-first CRDT list** — merge edits without a central winner | Extreme reliability nerd goal |
+
 ---
 
 ## Version naming
@@ -147,8 +295,16 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 | **0.3** | Phase 2 |
 | **0.4** | Phase 3 |
 | **0.5** | Phase 4 |
-| **0.6** | Phase 5 (current) |
+| **0.6** | Phase 5 |
 | **1.0** | Phase 6 release |
+| **1.1–1.2** | Phase 7 |
+| **1.3–1.4** | Phase 8 |
+| **1.5–1.6** | Phase 9 |
+| **1.7–1.8** | Phase 10 |
+| **1.9–2.0** | Phase 11 |
+| **2.x** | Phase 12+ |
+
+Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 
 ---
 
@@ -158,7 +314,7 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 |----------|----------|
 | `GET /api/health` | Probe, find host, dashboard URL, capabilities |
 | `GET /api/capabilities` | Optional richer caps, users, dashboard link templates |
-| `GET /api/clipboard` | Clip tab, widget (future) |
+| `GET /api/clipboard` | Clip tab, widget |
 | `POST /api/clipboard` | Send, share target, outbox |
 | `GET /api/todo` | List tab |
 | `POST /api/todo` | Add, share target |
@@ -168,12 +324,41 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 | `GET /api/incoming` | Incoming list |
 | Upload paths | Photos to Incoming |
 
+### Likely future host endpoints (client ready when host is)
+
+| Endpoint | Enables |
+|----------|---------|
+| `GET /api/events` (SSE) or WebSocket | Phase 8 live sync |
+| `POST /api/push/register` | Phase 8 FCM |
+| `GET /api/clipboard/{id}` | Pin, deep metadata, reactions |
+| `PATCH /api/todo/{id}` fields | Notes, due dates, categories |
+| `GET /api/theme` | Phase 7/10 branding |
+| `GET /.well-known/edc` or mDNS `_edc._tcp` | Phase 10 discovery |
+
 ---
 
 ## Delivery order
 
+**Sequential spine**
+
 ```
-Phase 1 → Phase 2 → Phase 3 (widget OR tile first) → Phase 4 → Phase 5 → Phase 6
+Phase 6 (1.0) → 7 → 8 → 9 → 10 → 11 → 12
 ```
 
-Parallel tracks: **UX** (1+4), **Connectivity** (2), **Surfaces** (3), **Engineering** (6).
+**Parallel tracks** — can overlap once 1.0 ships:
+
+| Track | Phases | Focus |
+|-------|--------|--------|
+| **UX** | 7, 11 | Delight, list/incoming superpowers |
+| **Reliability** | 6, 8, 12 | Tests, sync, trust |
+| **Surfaces** | 9 | Widget, tile, voice, Wear |
+| **House** | 10 | Multi-host, discovery, dashboard |
+| **Platform** | 6, 12 | CI, release, telemetry |
+
+**Suggested next three after 1.0**
+
+1. **Phase 7.1 + 7.2 + 7.7** — onboarding and swipe actions (high feel, low host dependency)
+2. **Phase 8.1 + 8.6 + 8.8** — Room cache, outbox v2, connection doctor (reliability you’ll feel)
+3. **Phase 9.1 + 9.5** — widget v2 and smarter share target (daily tap reduction)
+
+Host-dependent unlock: **Phase 8.3–8.4** (push/stream) and **Phase 11** (richer todo/incoming) move fastest when Everyday Clipboard grows matching APIs — coordinate both repos.

@@ -2,7 +2,7 @@
 
 Open this folder in **Android Studio** and build an APK. The native app talks HTTP to the house host directly, so the browser mixed-content block does not apply.
 
-See **[ROADMAP.md](ROADMAP.md)** for the full product plan (Phase 0–6).
+See **[ROADMAP.md](ROADMAP.md)** for the full product plan (Phases 0–12 + moonshots).
 
 ## Build APK
 
@@ -28,7 +28,7 @@ From the command line: `./gradlew assembleDebug`. The APK lands in the same `app
 - **v0.5** — Incoming thumbnails, multi-photo, share session, clip search, undo delete
 - **v0.6** — host capability discovery, graceful UI degradation, identity sync, dashboard deep links, optional HTTPS
 
-See **[ROADMAP.md](ROADMAP.md)** for Phase 6 (quality & release).
+See **[ROADMAP.md](ROADMAP.md)** for Phases 6–12 (next: 1.0 release, then everyday delight & live sync).
 
 Client only. Never hosts.
 
