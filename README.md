@@ -28,7 +28,7 @@ From the command line: `./gradlew assembleDebug`. The APK lands in the same `app
 - **v0.5** — Incoming thumbnails, multi-photo, share session, clip search, undo delete
 - **v0.6** — host capability discovery, graceful UI degradation, identity sync, dashboard deep links, optional HTTPS
 
-See **[ROADMAP.md](ROADMAP.md)** for Phases 6–12 (next: 1.0 release, then everyday delight & live sync).
+See **[ROADMAP.md](ROADMAP.md)** — **v0.6** shipped (Phases 0–5); **73 items** remain through Phase 12 (1.0 → 2.0).
 
 Client only. Never hosts.
 

@@ -28,7 +28,45 @@ Mike and Mhairi can read and write the **house clipboard**, manage the shared **
 | Share target | Chooser: clipboard or list; photos → Incoming |
 | Build | Gradle wrapper, unit tests, debug APK |
 
-Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
+## At a glance
+
+| | |
+|---|---|
+| **Current release** | **v0.6** (Phase 5) |
+| **Shipped** | Phases **0–5** — foundation through host capabilities |
+| **Next milestone** | Phase **6** → tagged **1.0** |
+| **Through Phase 12** | **73** remaining items (6.1–12.10) |
+| **Carried forward** | 5.6 FCM push → **8.3** (needs host API) |
+
+**Branch:** `cursor/finish-edc-pocket-android-f18a` · **PR:** [#2](https://github.com/InspMorse/edc-pocket-android/pull/2)
+
+---
+
+## Remaining roadmap (Phases 6–12)
+
+Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = after prior phase ships.
+
+| Phase | Target version | Goal | Items | Status |
+|-------|----------------|------|-------|--------|
+| **6** | **1.0** | Quality, trust & release | 6.1–6.8 | **Next** |
+| **7** | 1.1–1.2 | Everyday delight | 7.1–7.10 | Planned |
+| **8** | 1.3–1.4 | Always in sync | 8.1–8.9 (+ 5.6) | Planned |
+| **9** | 1.5–1.6 | More surfaces | 9.1–9.10 | Planned |
+| **10** | 1.7–1.8 | Smarter house | 10.1–10.10 | Planned |
+| **11** | 1.9–2.0 | Beyond clipboard | 11.1–11.10 | Planned |
+| **12** | 2.x | Trust at scale | 12.1–12.10 | Planned |
+
+**Spine:** `Phase 6 (1.0) → 7 → 8 → 9 → 10 → 11 → 12 (2.0)`
+
+**Host-dependent batches** (coordinate Everyday Clipboard host repo):
+
+- **8.2–8.4** — conditional fetch, FCM, SSE/WebSocket  
+- **10.2, 10.4, 10.6** — mDNS, QR pairing, theme/branding  
+- **11.1–11.5, 11.8** — richer todo/incoming APIs  
+
+**Client-only batches** (no host changes required):
+
+- **6** entire phase · **7** entire phase · **9.1, 9.3–9.5, 9.7** · **8.1, 8.6, 8.8–8.9** · **12.3–12.6, 12.9**
 
 ---
 
@@ -121,145 +159,145 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 
 ---
 
-## Phase 6 — Quality, trust & release (next)
+## Phase 6 — Quality, trust & release (**next** → **1.0**)
 
 **Goal:** Safe to install long-term; easy to ship updates.
 
-| # | Item |
-|---|------|
-| 6.1 | EdcClient MockWebServer integration tests |
-| 6.2 | Compose UI smoke tests |
-| 6.3 | Signed release build |
-| 6.4 | GitHub Actions CI |
-| 6.5 | Changelog / GitHub Releases |
-| 6.6 | Play internal track (optional) |
-| 6.7 | Privacy / permissions audit in README |
-| 6.8 | Crash reporting (optional) |
+| # | Item | Status |
+|---|------|--------|
+| 6.1 | EdcClient MockWebServer integration tests | Pending |
+| 6.2 | Compose UI smoke tests | Pending |
+| 6.3 | Signed release build | Pending |
+| 6.4 | GitHub Actions CI | Pending |
+| 6.5 | Changelog / GitHub Releases | Pending |
+| 6.6 | Play internal track (optional) | Pending |
+| 6.7 | Privacy / permissions audit in README | Pending |
+| 6.8 | Crash reporting (optional) | Pending |
 
 **Exit criteria:** Tagged **1.0** release APK; CI green on every PR; integration tests cover host client flows.
 
 ---
 
-## Phase 7 — Everyday delight
+## Phase 7 — Everyday delight (1.1–1.2)
 
 **Goal:** First-run and daily use feel obvious, fast, and pleasant — not just functional.
 
-| # | Item |
-|---|------|
-| 7.1 | First-run onboarding (identity → host → test → optional widget/tile) |
-| 7.2 | Swipe actions on clip rows (copy / share / dashboard) |
-| 7.3 | Swipe-to-complete on open todos |
-| 7.4 | Rich clip previews — link unfurl, phone → dial, address → maps |
-| 7.5 | Pin / star clips and list items (local or host-backed if API exists) |
-| 7.6 | List sorting & filters (open first, by person, by date) |
-| 7.7 | Better empty states and error copy (“host asleep”, “Tailscale off”) |
-| 7.8 | Material You / host accent colour sync (if host exposes theme) |
-| 7.9 | Tablet & foldable two-pane layout (clip + list side by side) |
-| 7.10 | Haptic & animation polish pass |
+| # | Item | Status |
+|---|------|--------|
+| 7.1 | First-run onboarding (identity → host → test → optional widget/tile) | Pending |
+| 7.2 | Swipe actions on clip rows (copy / share / dashboard) | Pending |
+| 7.3 | Swipe-to-complete on open todos | Pending |
+| 7.4 | Rich clip previews — link unfurl, phone → dial, address → maps | Pending |
+| 7.5 | Pin / star clips and list items (local or host-backed if API exists) | Pending |
+| 7.6 | List sorting & filters (open first, by person, by date) | Pending |
+| 7.7 | Better empty states and error copy (“host asleep”, “Tailscale off”) | Pending |
+| 7.8 | Material You / host accent colour sync (if host exposes theme) | Pending |
+| 7.9 | Tablet & foldable two-pane layout (clip + list side by side) | Pending |
+| 7.10 | Haptic & animation polish pass | Pending |
 
 **Exit criteria:** A new phone owner reaches “copy latest clip” in under 60 seconds without reading docs.
 
 ---
 
-## Phase 8 — Always in sync
+## Phase 8 — Always in sync (1.3–1.4)
 
 **Goal:** Data feels live; outages are invisible; bandwidth stays low.
 
-| # | Item |
-|---|------|
-| 8.1 | Local Room cache with explicit “last synced” timestamps |
-| 8.2 | Conditional fetch (`ETag` / `If-Modified-Since` when host supports) |
-| 8.3 | Push via FCM — host notifies phone of clip/list/incoming changes (5.6) |
-| 8.4 | SSE or WebSocket stream as alternative to polling |
-| 8.5 | Smarter background sync — event-driven + adaptive intervals |
-| 8.6 | Outbox v2 — per-item retry, exponential backoff, failure reasons |
-| 8.7 | Conflict hints when host data changed while editing offline |
-| 8.8 | Connection doctor in Settings (latency, per-endpoint status, export debug log) |
-| 8.9 | Staleness UI — “cached 12 min ago” on every tab |
+| # | Item | Status |
+|---|------|--------|
+| 8.1 | Local Room cache with explicit “last synced” timestamps | Pending |
+| 8.2 | Conditional fetch (`ETag` / `If-Modified-Since` when host supports) | Pending |
+| 8.3 | Push via FCM — host notifies phone of clip/list/incoming changes *(was 5.6)* | Pending · host |
+| 8.4 | SSE or WebSocket stream as alternative to polling | Pending · host |
+| 8.5 | Smarter background sync — event-driven + adaptive intervals | Pending |
+| 8.6 | Outbox v2 — per-item retry, exponential backoff, failure reasons | Pending |
+| 8.7 | Conflict hints when host data changed while editing offline | Pending |
+| 8.8 | Connection doctor in Settings (latency, per-endpoint status, export debug log) | Pending |
+| 8.9 | Staleness UI — “cached 12 min ago” on every tab | Pending |
 
 **Exit criteria:** With FCM or SSE enabled, clip updates appear without opening the app; airplane-mode sends still drain the outbox reliably.
 
 ---
 
-## Phase 9 — More surfaces
+## Phase 9 — More surfaces (1.5–1.6)
 
 **Goal:** House clipboard reachable from anywhere on the phone — not only inside the app.
 
-| # | Item |
-|---|------|
-| 9.1 | Widget v2 — configurable size, show open todo count, tap filter |
-| 9.2 | Lock screen widget / glance (where OS allows) |
-| 9.3 | Quick Settings tiles — open list, snap photo to Incoming |
-| 9.4 | Persistent “connected” notification with latest clip preview (optional) |
-| 9.5 | Share target v2 — remember last destination; skip chooser option |
-| 9.6 | App Actions / voice — “send to house list”, “copy house clipboard” |
-| 9.7 | Tasker / MacroDroid / automation intent API (documented) |
-| 9.8 | Wear OS tile or complication — copy latest |
-| 9.9 | NFC tag at the door — open app or copy latest |
-| 9.10 | Direct share shortcuts per session folder |
+| # | Item | Status |
+|---|------|--------|
+| 9.1 | Widget v2 — configurable size, show open todo count, tap filter | Pending |
+| 9.2 | Lock screen widget / glance (where OS allows) | Pending |
+| 9.3 | Quick Settings tiles — open list, snap photo to Incoming | Pending |
+| 9.4 | Persistent “connected” notification with latest clip preview (optional) | Pending |
+| 9.5 | Share target v2 — remember last destination; skip chooser option | Pending |
+| 9.6 | App Actions / voice — “send to house list”, “copy house clipboard” | Pending |
+| 9.7 | Tasker / MacroDroid / automation intent API (documented) | Pending |
+| 9.8 | Wear OS tile or complication — copy latest | Pending |
+| 9.9 | NFC tag at the door — open app or copy latest | Pending |
+| 9.10 | Direct share shortcuts per session folder | Pending |
 
 **Exit criteria:** Three one-tap paths to “copy latest” exist outside the launcher (widget, tile, voice or NFC).
 
 ---
 
-## Phase 10 — Smarter house
+## Phase 10 — Smarter house (1.7–1.8)
 
 **Goal:** Multiple hosts, zero-config discovery, and tighter coupling with the house dashboard.
 
-| # | Item |
-|---|------|
-| 10.1 | Multiple host profiles (home, holiday, parents) with quick switcher |
-| 10.2 | mDNS / Bonjour host discovery on LAN (“EDC on this network”) |
-| 10.3 | Tailscale MagicDNS hostname instead of raw IP |
-| 10.4 | QR pairing — scan dashboard QR to set Custom URL + trust host |
-| 10.5 | Embedded dashboard WebView panel (optional tab or sheet) |
-| 10.6 | Host branding sync — name, logo, accent from capabilities |
-| 10.7 | Geofence or “at home” hint (Wi‑Fi SSID + optional location) |
-| 10.8 | Guest / temporary identity with expiry |
-| 10.9 | Biometric lock for app or sensitive clips |
-| 10.10 | Certificate pinning for HTTPS hosts |
+| # | Item | Status |
+|---|------|--------|
+| 10.1 | Multiple host profiles (home, holiday, parents) with quick switcher | Pending |
+| 10.2 | mDNS / Bonjour host discovery on LAN (“EDC on this network”) | Pending · host |
+| 10.3 | Tailscale MagicDNS hostname instead of raw IP | Pending |
+| 10.4 | QR pairing — scan dashboard QR to set Custom URL + trust host | Pending · host |
+| 10.5 | Embedded dashboard WebView panel (optional tab or sheet) | Pending |
+| 10.6 | Host branding sync — name, logo, accent from capabilities | Pending · host |
+| 10.7 | Geofence or “at home” hint (Wi‑Fi SSID + optional location) | Pending |
+| 10.8 | Guest / temporary identity with expiry | Pending |
+| 10.9 | Biometric lock for app or sensitive clips | Pending |
+| 10.10 | Certificate pinning for HTTPS hosts | Pending |
 
 **Exit criteria:** Visiting a friend’s house EDC instance is a QR scan, not manual URL editing.
 
 ---
 
-## Phase 11 — Beyond clipboard
+## Phase 11 — Beyond clipboard (1.9–2.0)
 
 **Goal:** List and Incoming become household utilities, not side features.
 
-| # | Item |
-|---|------|
-| 11.1 | Todo notes, due dates, and sub-items (host API permitting) |
-| 11.2 | Recurring list items (“milk every week”) |
-| 11.3 | Shopping categories / aisles view |
-| 11.4 | Link a todo to a clip (“buy ingredients” → recipe URL) |
-| 11.5 | Incoming — video upload, PDF preview, audio inline |
-| 11.6 | Document scan → Incoming (ML Kit) |
-| 11.7 | Barcode / QR scan → send to clip or list |
-| 11.8 | Bulk Incoming actions (select, download zip, delete on host) |
-| 11.9 | Session gallery view — photos grouped by session folder |
-| 11.10 | Markdown or code-block rendering in clips |
+| # | Item | Status |
+|---|------|--------|
+| 11.1 | Todo notes, due dates, and sub-items (host API permitting) | Pending · host |
+| 11.2 | Recurring list items (“milk every week”) | Pending |
+| 11.3 | Shopping categories / aisles view | Pending |
+| 11.4 | Link a todo to a clip (“buy ingredients” → recipe URL) | Pending |
+| 11.5 | Incoming — video upload, PDF preview, audio inline | Pending · host |
+| 11.6 | Document scan → Incoming (ML Kit) | Pending |
+| 11.7 | Barcode / QR scan → send to clip or list | Pending |
+| 11.8 | Bulk Incoming actions (select, download zip, delete on host) | Pending · host |
+| 11.9 | Session gallery view — photos grouped by session folder | Pending |
+| 11.10 | Markdown or code-block rendering in clips | Pending |
 
 **Exit criteria:** A grocery run uses only the List tab; a event photo dump uses session gallery end-to-end.
 
 ---
 
-## Phase 12 — Trust at scale
+## Phase 12 — Trust at scale (2.x)
 
 **Goal:** Safe for years of daily use; observable when things go wrong.
 
-| # | Item |
-|---|------|
-| 12.1 | Structured audit log (who sent what, when — local or host) |
-| 12.2 | Rate-limit and abuse hints from host |
-| 12.3 | Data export (settings + cached clips/todos) |
-| 12.4 | Clear-data / reset without orphan workers |
-| 12.5 | Screenshot / golden UI tests for regressions |
-| 12.6 | Beta channel (Firebase App Distribution or Play internal) |
-| 12.7 | Feature flags driven by host capabilities |
-| 12.8 | Optional anonymised crash + connectivity telemetry (opt-in) |
-| 12.9 | Dependency & security update cadence documented |
-| 12.10 | **2.0** — breaking-change policy for host API versions |
+| # | Item | Status |
+|---|------|--------|
+| 12.1 | Structured audit log (who sent what, when — local or host) | Pending |
+| 12.2 | Rate-limit and abuse hints from host | Pending · host |
+| 12.3 | Data export (settings + cached clips/todos) | Pending |
+| 12.4 | Clear-data / reset without orphan workers | Pending |
+| 12.5 | Screenshot / golden UI tests for regressions | Pending |
+| 12.6 | Beta channel (Firebase App Distribution or Play internal) | Pending |
+| 12.7 | Feature flags driven by host capabilities | Pending |
+| 12.8 | Optional anonymised crash + connectivity telemetry (opt-in) | Pending |
+| 12.9 | Dependency & security update cadence documented | Pending |
+| 12.10 | **2.0** — breaking-change policy for host API versions | Pending |
 
 **Exit criteria:** You can diagnose “why didn’t my send arrive?” from in-app logs without adb.
 
@@ -288,23 +326,44 @@ Nothing off the table — park here until a host API or strong user pull exists.
 
 ## Version naming
 
-| Version | Scope |
-|---------|--------|
-| **0.1** | Phase 0 |
-| **0.2** | Phase 1 |
-| **0.3** | Phase 2 |
-| **0.4** | Phase 3 |
-| **0.5** | Phase 4 |
-| **0.6** | Phase 5 |
-| **1.0** | Phase 6 release |
-| **1.1–1.2** | Phase 7 |
-| **1.3–1.4** | Phase 8 |
-| **1.5–1.6** | Phase 9 |
-| **1.7–1.8** | Phase 10 |
-| **1.9–2.0** | Phase 11 |
-| **2.x** | Phase 12+ |
+| Version | Scope | Status |
+|---------|--------|--------|
+| **0.1** | Phase 0 | Shipped |
+| **0.2** | Phase 1 | Shipped |
+| **0.3** | Phase 2 | Shipped |
+| **0.4** | Phase 3 | Shipped |
+| **0.5** | Phase 4 | Shipped |
+| **0.6** | Phase 5 | **Current** |
+| **1.0** | Phase 6 | **Next** |
+| **1.1–1.2** | Phase 7 | Planned |
+| **1.3–1.4** | Phase 8 | Planned |
+| **1.5–1.6** | Phase 9 | Planned |
+| **1.7–1.8** | Phase 10 | Planned |
+| **1.9–2.0** | Phase 11 | Planned |
+| **2.x** | Phase 12 | Planned |
 
 Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
+
+### Full remaining checklist (6.1 → 12.10)
+
+<details>
+<summary>73 items — expand to scan</summary>
+
+**Phase 6 (1.0):** 6.1 integration tests · 6.2 UI smoke tests · 6.3 signed release · 6.4 CI · 6.5 changelog/releases · 6.6 Play internal · 6.7 privacy audit · 6.8 crash reporting  
+
+**Phase 7:** 7.1 onboarding · 7.2 clip swipes · 7.3 swipe complete · 7.4 rich previews · 7.5 pin/star · 7.6 list sort/filter · 7.7 error copy · 7.8 theme sync · 7.9 tablet layout · 7.10 animation polish  
+
+**Phase 8:** 8.1 Room cache · 8.2 conditional fetch · 8.3 FCM · 8.4 SSE/WS · 8.5 adaptive sync · 8.6 outbox v2 · 8.7 conflict hints · 8.8 connection doctor · 8.9 staleness UI  
+
+**Phase 9:** 9.1 widget v2 · 9.2 lock screen · 9.3 QS tiles · 9.4 persistent notif · 9.5 share v2 · 9.6 voice · 9.7 Tasker API · 9.8 Wear · 9.9 NFC · 9.10 session shortcuts  
+
+**Phase 10:** 10.1 multi-host · 10.2 mDNS · 10.3 MagicDNS · 10.4 QR pair · 10.5 WebView dashboard · 10.6 branding · 10.7 geofence · 10.8 guest identity · 10.9 biometric · 10.10 cert pinning  
+
+**Phase 11:** 11.1 todo notes/dates · 11.2 recurring · 11.3 categories · 11.4 todo↔clip link · 11.5 video/PDF/audio · 11.6 doc scan · 11.7 barcode · 11.8 bulk Incoming · 11.9 session gallery · 11.10 markdown clips  
+
+**Phase 12:** 12.1 audit log · 12.2 rate limits · 12.3 export · 12.4 reset · 12.5 golden tests · 12.6 beta channel · 12.7 feature flags · 12.8 telemetry · 12.9 security cadence · 12.10 API 2.0 policy  
+
+</details>
 
 ---
 
@@ -339,26 +398,30 @@ Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 
 ## Delivery order
 
-**Sequential spine**
+**Sequential spine (required order for major releases)**
 
 ```
-Phase 6 (1.0) → 7 → 8 → 9 → 10 → 11 → 12
+v0.6 (now) → Phase 6 (1.0) → 7 → 8 → 9 → 10 → 11 → 12 (2.0)
 ```
 
-**Parallel tracks** — can overlap once 1.0 ships:
+**Parallel tracks** — can overlap once **1.0** ships:
 
 | Track | Phases | Focus |
 |-------|--------|--------|
+| **Platform** | 6, 12 | CI, release, telemetry, API policy |
+| **Reliability** | 6, 8, 12 | Tests, cache, sync, outbox, doctor |
 | **UX** | 7, 11 | Delight, list/incoming superpowers |
-| **Reliability** | 6, 8, 12 | Tests, sync, trust |
-| **Surfaces** | 9 | Widget, tile, voice, Wear |
+| **Surfaces** | 9 | Widget, tile, voice, Wear, NFC |
 | **House** | 10 | Multi-host, discovery, dashboard |
-| **Platform** | 6, 12 | CI, release, telemetry |
 
-**Suggested next three after 1.0**
+**Recommended batches after 1.0**
 
-1. **Phase 7.1 + 7.2 + 7.7** — onboarding and swipe actions (high feel, low host dependency)
-2. **Phase 8.1 + 8.6 + 8.8** — Room cache, outbox v2, connection doctor (reliability you’ll feel)
-3. **Phase 9.1 + 9.5** — widget v2 and smarter share target (daily tap reduction)
+| Batch | Items | Why |
+|-------|-------|-----|
+| Feel | 7.1, 7.2, 7.7 | Onboarding + swipes; no host work |
+| Trust | 8.1, 8.6, 8.8, 8.9 | Cache, outbox v2, doctor, staleness |
+| Reach | 9.1, 9.5, 9.3 | Widget v2, share memory, extra tiles |
+| Live | 8.3, 8.4, 8.2 | Needs host push/stream/ETag APIs |
+| Utility | 11.9, 11.6, 11.3 | Session gallery, scan, shopping aisles |
 
-Host-dependent unlock: **Phase 8.3–8.4** (push/stream) and **Phase 11** (richer todo/incoming) move fastest when Everyday Clipboard grows matching APIs — coordinate both repos.
+Host-dependent unlock: **8.3–8.4**, **10.2/10.4/10.6**, and much of **11** move fastest when Everyday Clipboard grows matching APIs — coordinate both repos.
