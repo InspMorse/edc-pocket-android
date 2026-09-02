@@ -1,0 +1,8 @@
+{
+  "name": "EDC pocket Android",
+  "user": "ubuntu",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "install": "printf 'sdk.dir=%s\\n' \"$ANDROID_HOME\" > local.properties\ngradle --no-daemon :app:assembleDebug"
+}
