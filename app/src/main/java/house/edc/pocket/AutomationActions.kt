@@ -60,8 +60,8 @@ object AutomationActions {
         val outbox = OutboxStore(context)
         val ok = runCatching {
             when (kind) {
-                OutboxKind.CLIP -> client.sendText(base, settings.identity, text)
-                OutboxKind.LIST -> client.addTodo(base, settings.identity, text)
+                OutboxKind.CLIP -> client.sendText(base, settings.effectiveIdentity, text)
+                OutboxKind.LIST -> client.addTodo(base, settings.effectiveIdentity, text)
                 OutboxKind.PHOTO -> error("Unexpected")
             }
         }.isSuccess

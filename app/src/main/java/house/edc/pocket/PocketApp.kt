@@ -44,6 +44,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.Dashboard
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Refresh
@@ -127,7 +128,7 @@ private val identities = listOf("Mike", "Mhairi")
 private val clipFilters = listOf("All", "Mike", "Mhairi", "EDC")
 private const val clipPreviewChars = 220
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun PocketApp(
     settings: EdcSettings,
@@ -139,9 +140,11 @@ fun PocketApp(
     hostConnector: HostConnector,
     networkMonitor: NetworkMonitor,
     connectionDoctor: ConnectionDoctor,
+    homeHintMonitor: HomeHintMonitor,
     launchAction: LaunchAction = LaunchAction.NONE,
     launchText: String = "",
     onLaunchActionHandled: () -> Unit = {},
+    onScanQrPair: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -184,6 +187,21 @@ fun PocketApp(
         var urlValidationError by remember { mutableStateOf<String?>(null) }
         var uploadProgress by remember { mutableStateOf<UploadProgress?>(null) }
         val resumeTick = rememberResumeTick()
+        var discoveredHosts by remember { mutableStateOf<List<DiscoveredHost>>(emptyList()) }
+        var discovering by remember { mutableStateOf(false) }
+        val displayIdentity = when {
+            settings.guestActive -> "${settings.guestIdentity} (guest)"
+            else -> settings.identity
+        }
+        val dashboardUrl = hostHealth?.dashboardUrl?.takeIf { it.isNotBlank() }
+            ?: hostHealth?.linkTemplates?.dashboardBase?.takeIf { it.isNotBlank() }
+        val navTabs = buildList {
+            add(PocketTab.CLIP)
+            add(PocketTab.LIST)
+            add(PocketTab.SEND)
+            if (settings.showDashboardTab && dashboardUrl != null) add(PocketTab.DASHBOARD)
+            add(PocketTab.SETTINGS)
+        }
 
         suspend fun refresh(silent: Boolean = false) {
             val base = settings.baseUrl
@@ -217,6 +235,7 @@ fun PocketApp(
                         stale = outcome.stale,
                         error = error,
                         lastSyncedAt = lastSyncedAt,
+                        homeHintMonitor = homeHintMonitor,
                     )
                     val entry = outcome.snapshot.latest ?: outcome.snapshot.history.firstOrNull()
                     if (entry != null && outcome.fromNetwork) {
@@ -238,6 +257,9 @@ fun PocketApp(
                     }
                     if (outcome.health != null && outcome.fromNetwork) {
                         PushRegistration.registerIfPossible(context, client, settings, outcome.health)
+                        if (outcome.health.tlsPinSha256.isNotBlank()) {
+                            scope.launch { store.setTlsPinSha256(outcome.health.tlsPinSha256) }
+                        }
                     }
                     SurfaceEffects.afterSnapshot(context, outcome.snapshot, settings)
                 },
@@ -250,7 +272,7 @@ fun PocketApp(
                             syncCoordinator.lastSyncedAt(settings)
                         }
                         error = hostFailureMessage(settings, it.message, stale = true)
-                        status = connectionLabel(settings, stale = true, error = error, lastSyncedAt = lastSyncedAt)
+                        status = connectionLabel(settings, stale = true, error = error, lastSyncedAt = lastSyncedAt, homeHintMonitor = homeHintMonitor)
                     } else {
                         stale = snapshot.latest != null ||
                             snapshot.history.isNotEmpty() ||
@@ -313,7 +335,7 @@ fun PocketApp(
                     runCatching {
                         client.uploadImage(
                             settings.baseUrl,
-                            settings.identity,
+                            settings.effectiveIdentity,
                             uri,
                             name,
                             session,
@@ -375,12 +397,12 @@ fun PocketApp(
             PollScheduler.apply(context, mode)
         }
 
-        LaunchedEffect(settings.baseUrl, settings.identity, resumeTick) {
+        LaunchedEffect(settings.baseUrl, settings.effectiveIdentity, resumeTick) {
             refresh()
             flushOutbox()
         }
 
-        LaunchedEffect(networkKind, settings.autoHost, settings.preset, settings.identity) {
+        LaunchedEffect(networkKind, settings.autoHost, settings.preset, settings.effectiveIdentity) {
             if (networkKind == NetworkKind.NONE) return@LaunchedEffect
             val found = withContext(Dispatchers.IO) {
                 hostConnector.syncHost(settings, store, networkKind)
@@ -396,7 +418,7 @@ fun PocketApp(
             flushOutbox()
         }
 
-        LaunchedEffect(currentTab, settings.baseUrl, settings.identity, liveStreamActive) {
+        LaunchedEffect(currentTab, settings.baseUrl, settings.effectiveIdentity, liveStreamActive) {
             while (isActive) {
                 val delayMs = SyncPolicy.foregroundPollMs(currentTab, hostHealth, liveStreamActive)
                 delay(delayMs)
@@ -404,27 +426,27 @@ fun PocketApp(
             }
         }
 
-        LaunchedEffect(settings.baseUrl, settings.identity, hostHealth?.capabilities?.sse) {
+        LaunchedEffect(settings.baseUrl, settings.effectiveIdentity, hostHealth?.capabilities?.sse) {
             liveStreamActive = false
             if (settings.baseUrl.isBlank()) return@LaunchedEffect
             val stream = HostEventStream()
             if (!stream.canUse(hostHealth)) return@LaunchedEffect
             liveStreamActive = true
-            stream.listen(settings.baseUrl, settings.identity) {
+            stream.listen(settings.baseUrl, settings.effectiveIdentity) {
                 refresh(silent = true)
             }
             liveStreamActive = false
         }
 
-        LaunchedEffect(currentTab, settings.baseUrl, settings.identity) {
+        LaunchedEffect(currentTab, settings.baseUrl, settings.effectiveIdentity) {
             if (currentTab != PocketTab.SETTINGS || settings.baseUrl.isBlank()) return@LaunchedEffect
             val health = withContext(Dispatchers.IO) {
-                runCatching { client.probeHealth(settings.baseUrl, settings.identity) }.getOrNull()
+                runCatching { client.probeHealth(settings.baseUrl, settings.effectiveIdentity) }.getOrNull()
             }
             if (health != null) hostHealth = health
         }
 
-        LaunchedEffect(launchAction, settings.baseUrl, settings.identity, launchText) {
+        LaunchedEffect(launchAction, settings.baseUrl, settings.effectiveIdentity, launchText) {
             if (launchAction == LaunchAction.NONE) return@LaunchedEffect
             when (launchAction) {
                 LaunchAction.OPEN_SEND -> tab = PocketTab.SEND.name
@@ -454,7 +476,7 @@ fun PocketApp(
                         sendWithOutbox(
                             okMessage = "Sent to clipboard",
                             enqueueItem = { OutboxItem(kind = OutboxKind.CLIP, text = text) },
-                            send = { client.sendText(settings.baseUrl, settings.identity, text) },
+                            send = { client.sendText(settings.baseUrl, settings.effectiveIdentity, text) },
                         )
                     }
                 }
@@ -467,7 +489,7 @@ fun PocketApp(
                         sendWithOutbox(
                             okMessage = "Added to list",
                             enqueueItem = { OutboxItem(kind = OutboxKind.LIST, text = text) },
-                            send = { client.addTodo(settings.baseUrl, settings.identity, text) },
+                            send = { client.addTodo(settings.baseUrl, settings.effectiveIdentity, text) },
                         )
                     }
                 }
@@ -483,18 +505,32 @@ fun PocketApp(
             topBar = {
                 TopAppBar(
                     title = {
-                        Column {
-                            Text("EDC pocket")
-                            Text(
-                                text = settings.identity + " · " + connectionLabel(
-                                    settings,
-                                    stale,
-                                    error,
-                                    lastSyncedAt,
-                                ),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = EdcMuted,
-                            )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val logo = hostHealth?.logoUrl?.takeIf { it.isNotBlank() }
+                            if (logo != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context).data(logo).crossfade(true).build(),
+                                    contentDescription = hostHealth?.hostName ?: "House",
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .padding(end = 8.dp),
+                                    contentScale = ContentScale.Fit,
+                                )
+                            }
+                            Column {
+                                Text(hostHealth?.hostName?.ifBlank { "EDC pocket" } ?: "EDC pocket")
+                                Text(
+                                    text = displayIdentity + " · " + connectionLabel(
+                                        settings,
+                                        stale,
+                                        error,
+                                        lastSyncedAt,
+                                        homeHintMonitor,
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = EdcMuted,
+                                )
+                            }
                         }
                     },
                     actions = {
@@ -520,7 +556,7 @@ fun PocketApp(
             },
             bottomBar = {
                 NavigationBar(containerColor = EdcSurface) {
-                    PocketTab.entries.forEach { item ->
+                    navTabs.forEach { item ->
                         NavigationBarItem(
                             selected = currentTab == item,
                             onClick = { tab = item.name },
@@ -530,6 +566,7 @@ fun PocketApp(
                                         PocketTab.CLIP -> Icons.Outlined.ContentPaste
                                         PocketTab.LIST -> Icons.Outlined.Checklist
                                         PocketTab.SEND -> Icons.AutoMirrored.Outlined.Send
+                                        PocketTab.DASHBOARD -> Icons.Outlined.Dashboard
                                         PocketTab.SETTINGS -> Icons.Outlined.Settings
                                     },
                                     contentDescription = item.label,
@@ -572,6 +609,24 @@ fun PocketApp(
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
+                }
+                if (settings.profiles.size > 1) {
+                    FlowRow(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        settings.profiles.forEach { profile ->
+                            FilterChip(
+                                selected = settings.activeProfileId == profile.id,
+                                onClick = { scope.launch { store.setActiveProfileId(profile.id) } },
+                                label = { Text(profile.name) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF0E3A43),
+                                    selectedLabelColor = EdcAccent,
+                                ),
+                            )
+                        }
+                    }
                 }
                 val caps = hostHealth?.capabilities ?: HostCapabilities.ALL
                 val configuration = LocalConfiguration.current
@@ -621,7 +676,7 @@ fun PocketApp(
                                             OutboxItem(kind = OutboxKind.CLIP, text = text)
                                         },
                                         send = {
-                                            client.sendText(settings.baseUrl, settings.identity, text)
+                                            client.sendText(settings.baseUrl, settings.effectiveIdentity, text)
                                         },
                                     )
                                 }
@@ -637,7 +692,7 @@ fun PocketApp(
                             showDashboardLinks = caps.dashboard,
                             sortMode = settings.listSortMode,
                             personFilter = settings.listPersonFilter,
-                            identity = settings.identity,
+                            identity = settings.effectiveIdentity,
                             pinnedTodoIds = pinnedTodoIds,
                             onSortChange = { scope.launch { store.setListSortMode(it) } },
                             onPersonFilterChange = { scope.launch { store.setListPersonFilter(it) } },
@@ -657,7 +712,7 @@ fun PocketApp(
                                             OutboxItem(kind = OutboxKind.LIST, text = text)
                                         },
                                         send = {
-                                            client.addTodo(settings.baseUrl, settings.identity, text)
+                                            client.addTodo(settings.baseUrl, settings.effectiveIdentity, text)
                                         },
                                     )
                                 }
@@ -674,7 +729,7 @@ fun PocketApp(
                                     hostCall(null) {
                                         client.toggleTodo(
                                             settings.baseUrl,
-                                            settings.identity,
+                                            settings.effectiveIdentity,
                                             item.id,
                                             next,
                                         )
@@ -700,7 +755,7 @@ fun PocketApp(
                                     hostCall(null) {
                                         client.deleteTodo(
                                             settings.baseUrl,
-                                            settings.identity,
+                                            settings.effectiveIdentity,
                                             item.id,
                                         )
                                     }
@@ -714,7 +769,7 @@ fun PocketApp(
                                         return@launch
                                     }
                                     val text = withContext(Dispatchers.IO) {
-                                        client.todoPlainText(base, settings.identity)
+                                        client.todoPlainText(base, settings.effectiveIdentity)
                                     }
                                     val send = Intent(Intent.ACTION_SEND).apply {
                                         type = "text/plain"
@@ -772,7 +827,7 @@ fun PocketApp(
                                         OutboxItem(kind = OutboxKind.CLIP, text = text)
                                     },
                                     send = {
-                                        client.sendText(settings.baseUrl, settings.identity, text)
+                                        client.sendText(settings.baseUrl, settings.effectiveIdentity, text)
                                     },
                                 )
                             }
@@ -786,7 +841,7 @@ fun PocketApp(
                         showDashboardLinks = caps.dashboard,
                         sortMode = settings.listSortMode,
                         personFilter = settings.listPersonFilter,
-                        identity = settings.identity,
+                        identity = settings.effectiveIdentity,
                         pinnedTodoIds = pinnedTodoIds,
                         onSortChange = { scope.launch { store.setListSortMode(it) } },
                         onPersonFilterChange = { scope.launch { store.setListPersonFilter(it) } },
@@ -806,7 +861,7 @@ fun PocketApp(
                                         OutboxItem(kind = OutboxKind.LIST, text = text)
                                     },
                                     send = {
-                                        client.addTodo(settings.baseUrl, settings.identity, text)
+                                        client.addTodo(settings.baseUrl, settings.effectiveIdentity, text)
                                     },
                                 )
                             }
@@ -823,7 +878,7 @@ fun PocketApp(
                                 hostCall(null) {
                                     client.toggleTodo(
                                         settings.baseUrl,
-                                        settings.identity,
+                                        settings.effectiveIdentity,
                                         item.id,
                                         next,
                                     )
@@ -849,7 +904,7 @@ fun PocketApp(
                                 hostCall(null) {
                                     client.deleteTodo(
                                         settings.baseUrl,
-                                        settings.identity,
+                                        settings.effectiveIdentity,
                                         item.id,
                                     )
                                 }
@@ -863,7 +918,7 @@ fun PocketApp(
                                     return@launch
                                 }
                                 val text = withContext(Dispatchers.IO) {
-                                    client.todoPlainText(base, settings.identity)
+                                    client.todoPlainText(base, settings.effectiveIdentity)
                                 }
                                 val send = Intent(Intent.ACTION_SEND).apply {
                                     type = "text/plain"
@@ -895,7 +950,7 @@ fun PocketApp(
                                         OutboxItem(kind = OutboxKind.CLIP, text = text)
                                     },
                                     send = {
-                                        client.sendText(settings.baseUrl, settings.identity, text)
+                                        client.sendText(settings.baseUrl, settings.effectiveIdentity, text)
                                     },
                                 )
                             }
@@ -908,7 +963,7 @@ fun PocketApp(
                                         OutboxItem(kind = OutboxKind.LIST, text = text)
                                     },
                                     send = {
-                                        client.addTodo(settings.baseUrl, settings.identity, text)
+                                        client.addTodo(settings.baseUrl, settings.effectiveIdentity, text)
                                     },
                                 )
                             }
@@ -932,7 +987,7 @@ fun PocketApp(
                                     runCatching {
                                         val (bytes, mime) = client.downloadIncoming(
                                             settings.baseUrl,
-                                            settings.identity,
+                                            settings.effectiveIdentity,
                                             drop,
                                         )
                                         IncomingFiles.shareBytes(context, drop.name, bytes, mime)
@@ -951,7 +1006,7 @@ fun PocketApp(
                                     runCatching {
                                         val (bytes, mime) = client.downloadIncoming(
                                             settings.baseUrl,
-                                            settings.identity,
+                                            settings.effectiveIdentity,
                                             drop,
                                         )
                                         IncomingFiles.saveToDevice(context, drop.name, bytes, mime)
@@ -969,11 +1024,31 @@ fun PocketApp(
                         requestCamera = pendingCamera,
                         onCameraHandled = { pendingCamera = false },
                     )
+                    PocketTab.DASHBOARD -> {
+                        val url = dashboardUrl.orEmpty()
+                        if (url.isBlank()) {
+                            EmptyHint(
+                                text = "No dashboard URL from the host yet.",
+                                modifier = Modifier.padding(16.dp),
+                            )
+                        } else {
+                            DashboardPane(url = url, identity = settings.effectiveIdentity)
+                        }
+                    }
                     PocketTab.SETTINGS -> SettingsPane(
                         settings = settings,
                         store = store,
                         onIdentity = { scope.launch { store.setIdentity(it) } },
-                        onPreset = { scope.launch { store.setPreset(it) } },
+                        onPreset = { preset ->
+                            scope.launch {
+                                store.setPreset(preset)
+                                when (preset) {
+                                    HostPreset.LAN -> store.setActiveProfileId("home")
+                                    HostPreset.TAILSCALE -> store.setActiveProfileId("away")
+                                    HostPreset.CUSTOM -> Unit
+                                }
+                            }
+                        },
                         onProbe = {
                             scope.launch {
                                 val base = settings.baseUrl
@@ -983,7 +1058,7 @@ fun PocketApp(
                                 }
                                 loading = true
                                 val result = withContext(Dispatchers.IO) {
-                                    runCatching { client.probeHealth(base, settings.identity) }
+                                    runCatching { client.probeHealth(base, settings.effectiveIdentity) }
                                 }
                                 loading = false
                                 result.fold(
@@ -1003,7 +1078,7 @@ fun PocketApp(
                             scope.launch {
                                 loading = true
                                 val found = withContext(Dispatchers.IO) {
-                                    client.findReachableHost(settings, settings.identity)
+                                    client.findReachableHost(settings, settings.effectiveIdentity)
                                 }
                                 loading = false
                                 if (found == null) {
@@ -1051,6 +1126,31 @@ fun PocketApp(
                         useHttps = settings.useHttps,
                         onUseHttps = { scope.launch { store.setUseHttps(it) } },
                         connectionDoctor = connectionDoctor,
+                        onScanQrPair = onScanQrPair,
+                        discoveredHosts = discoveredHosts,
+                        discovering = discovering,
+                        onDiscoverHosts = {
+                            scope.launch {
+                                discovering = true
+                                discoveredHosts = withContext(Dispatchers.IO) {
+                                    EdcDiscovery(context).discover()
+                                }
+                                discovering = false
+                            }
+                        },
+                        onSelectDiscovered = { host ->
+                            scope.launch {
+                                val id = "discovered_${host.baseUrl.hashCode()}"
+                                val updated = settings.profiles.filter { it.id != id } + HostProfile(
+                                    id = id,
+                                    name = host.name,
+                                    url = host.baseUrl,
+                                )
+                                store.setProfiles(updated)
+                                store.setActiveProfileId(id)
+                                refresh()
+                            }
+                        },
                     )
                 }
             }
@@ -1627,6 +1727,11 @@ private fun SettingsPane(
     useHttps: Boolean,
     onUseHttps: (Boolean) -> Unit,
     connectionDoctor: ConnectionDoctor,
+    onScanQrPair: () -> Unit,
+    discoveredHosts: List<DiscoveredHost>,
+    discovering: Boolean,
+    onDiscoverHosts: () -> Unit,
+    onSelectDiscovered: (DiscoveredHost) -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -1636,6 +1741,12 @@ private fun SettingsPane(
     var sessionsDraft by remember(settings.pinnedSessions) {
         mutableStateOf(formatPinnedSessions(settings.pinnedSessions))
     }
+    var homeWifiDraft by remember(settings.homeWifiSsids) {
+        mutableStateOf(formatPinnedSessions(settings.homeWifiSsids))
+    }
+    var magicDnsDraft by remember(settings.magicDnsHost) { mutableStateOf(settings.magicDnsHost) }
+    var guestNameDraft by remember(settings.guestIdentity) { mutableStateOf(settings.guestIdentity) }
+    var tlsPinDraft by remember(settings.tlsPinSha256) { mutableStateOf(settings.tlsPinSha256) }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1658,6 +1769,50 @@ private fun SettingsPane(
             }
         }
         SectionLabel("Host")
+        Text(
+            text = "Switch profiles from chips under the top bar, or edit them here.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        settings.profiles.forEach { profile ->
+            OutlinedTextField(
+                value = profile.url,
+                onValueChange = { value ->
+                    scope.launch {
+                        val updated = settings.profiles.map {
+                            if (it.id == profile.id) it.copy(url = value) else it
+                        }
+                        store.setProfiles(updated)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("${profile.name} URL") },
+            )
+        }
+        OutlinedTextField(
+            value = magicDnsDraft,
+            onValueChange = { magicDnsDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Tailscale MagicDNS host") },
+            placeholder = { Text("edc.tail123456.ts.net") },
+            supportingText = { Text("Used for Away when no profile URL overrides it") },
+        )
+        Button(onClick = { scope.launch { store.setMagicDnsHost(magicDnsDraft) } }) {
+            Text("Save MagicDNS host")
+        }
+        Button(onClick = onScanQrPair, modifier = Modifier.fillMaxWidth()) {
+            Text("Scan dashboard QR to pair")
+        }
+        OutlinedButton(onClick = onDiscoverHosts, enabled = !discovering, modifier = Modifier.fillMaxWidth()) {
+            Text(if (discovering) "Searching LAN…" else "Discover EDC on this network")
+        }
+        discoveredHosts.forEach { host ->
+            TextButton(onClick = { onSelectDiscovered(host) }) {
+                Text("${host.name} · ${host.baseUrl} (${host.source})")
+            }
+        }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             HostPreset.entries.forEach { preset ->
                 FilterChip(
@@ -1715,6 +1870,89 @@ private fun SettingsPane(
                 )
             }
             Switch(checked = useHttps, onCheckedChange = onUseHttps)
+        }
+        SectionLabel("Smarter house")
+        OutlinedTextField(
+            value = homeWifiDraft,
+            onValueChange = { homeWifiDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Home Wi‑Fi names") },
+            placeholder = { Text("MyHomeWiFi, House-5G") },
+            supportingText = { Text("Comma-separated SSIDs for the “at home” hint") },
+        )
+        Button(onClick = { scope.launch { store.setHomeWifiSsids(parsePinnedSessions(homeWifiDraft)) } }) {
+            Text("Save home Wi‑Fi names")
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Show dashboard tab", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Embed the house dashboard inside the app",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.showDashboardTab,
+                onCheckedChange = { scope.launch { store.setShowDashboardTab(it) } },
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Require unlock", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Fingerprint or PIN to open the app",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.biometricLock,
+                onCheckedChange = { scope.launch { store.setBiometricLock(it) } },
+            )
+        }
+        OutlinedTextField(
+            value = guestNameDraft,
+            onValueChange = { guestNameDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Guest identity name") },
+            placeholder = { Text("Guest") },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                scope.launch {
+                    store.setGuestMode(
+                        enabled = true,
+                        identity = guestNameDraft.ifBlank { "Guest" },
+                        expiresAt = System.currentTimeMillis() + 24 * 60 * 60 * 1000L,
+                    )
+                }
+            }) {
+                Text("Guest for 24h")
+            }
+            OutlinedButton(onClick = { scope.launch { store.clearGuestMode() } }) {
+                Text("Clear guest")
+            }
+        }
+        OutlinedTextField(
+            value = tlsPinDraft,
+            onValueChange = { tlsPinDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("HTTPS certificate pin (sha256)") },
+            supportingText = { Text("Optional — used when talking to the host over HTTPS") },
+        )
+        Button(onClick = { scope.launch { store.setTlsPinSha256(tlsPinDraft) } }) {
+            Text("Save certificate pin")
         }
         SectionLabel("Glanceable")
         Text(
@@ -2206,12 +2444,14 @@ private fun connectionLabel(
     stale: Boolean,
     error: String?,
     lastSyncedAt: Long? = null,
+    homeHintMonitor: HomeHintMonitor? = null,
 ): String {
     if (stale && error != null) {
         return formatStaleness(lastSyncedAt) ?: "Offline · cached"
     }
     if (error != null) return "Unreachable"
     formatStaleness(lastSyncedAt)?.let { return it.replaceFirstChar { c -> c.uppercase() } }
+    homeHintMonitor?.hintLabel(settings)?.let { return it }
     return when (settings.preset) {
         HostPreset.LAN -> "Home LAN"
         HostPreset.TAILSCALE -> "Away"

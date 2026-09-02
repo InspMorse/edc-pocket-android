@@ -20,7 +20,7 @@ object PushRegistration {
         if (base.isBlank()) return null
         // Host API stub — real FCM token wiring lands when google-services.json is added.
         return runCatching {
-            client.registerPushToken(base, settings.identity, token = "stub-unconfigured")
+            client.registerPushToken(base, settings.effectiveIdentity, token = "stub-unconfigured")
             "stub-unconfigured"
         }.getOrNull()
     }

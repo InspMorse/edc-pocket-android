@@ -7,7 +7,22 @@ Versioning: **0.x** = pre-release phases · **1.0** = Phase 6 trust release · *
 
 ---
 
-## [1.5.0] — Phase 9
+## [1.7.0] — Phase 10
+
+### Added
+
+- Multiple host profiles (home, away, custom) with quick switcher in the top bar
+- mDNS / Bonjour discovery on LAN (`_edc._tcp.`) — “Discover on LAN” in Settings
+- Tailscale MagicDNS hostname field (replaces raw IP when set)
+- QR pairing — scan JSON or `edc://pair` URI to add a host profile + optional TLS pin
+- Optional embedded dashboard WebView tab (enable in Settings)
+- Host branding sync — logo from capabilities, accent colour in top bar
+- “At home” hint from configured home Wi‑Fi SSIDs
+- Guest / temporary identity with 24-hour expiry
+- Biometric lock for app launch (Settings)
+- Certificate pinning for HTTPS hosts (from QR or Settings)
+
+---
 
 ### Added
 

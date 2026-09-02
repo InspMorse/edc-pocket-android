@@ -7,16 +7,20 @@ import okhttp3.MultipartBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import java.util.concurrent.TimeUnit
 
 class EdcClient(
     private val resolver: ContentResolver,
+    tlsConfig: TlsPinConfig = TlsPinConfig(),
 ) {
-    private val http = OkHttpClient.Builder()
-        .connectTimeout(8, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
-        .build()
+    @Volatile
+    private var tlsConfig: TlsPinConfig = tlsConfig
+    @Volatile
+    private var http: OkHttpClient = TlsPinning.buildClient(tlsConfig)
+
+    fun updateTlsConfig(config: TlsPinConfig) {
+        tlsConfig = config
+        http = TlsPinning.buildClient(config)
+    }
 
     private val jsonType = "application/json; charset=utf-8".toMediaType()
 
@@ -87,6 +91,8 @@ class EdcClient(
                 todoItem = health.linkTemplates.todoItem.ifBlank { links.todoItem },
             ),
             themeAccent = health.themeAccent.ifBlank { parseThemeAccentFromJson(root) },
+            logoUrl = health.logoUrl.ifBlank { parseLogoUrlFromJson(root) },
+            tlsPinSha256 = health.tlsPinSha256.ifBlank { parseTlsPinFromJson(root) },
         )
     }
 

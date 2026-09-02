@@ -11,7 +11,7 @@ class OutboxProcessor(
     suspend fun flush(settings: EdcSettings): Int {
         val base = settings.baseUrl
         if (base.isBlank()) return 0
-        val health = runCatching { client.probeHealth(base, settings.identity) }.getOrNull()
+        val health = runCatching { client.probeHealth(base, settings.effectiveIdentity) }.getOrNull()
         if (health?.ok != true) return 0
         var sent = 0
         val now = System.currentTimeMillis()
@@ -20,14 +20,14 @@ class OutboxProcessor(
             if (item.nextRetryAt > now) continue
             val result = runCatching {
                 when (item.kind) {
-                    OutboxKind.CLIP -> client.sendText(base, settings.identity, item.text)
-                    OutboxKind.LIST -> client.addTodo(base, settings.identity, item.text)
+                    OutboxKind.CLIP -> client.sendText(base, settings.effectiveIdentity, item.text)
+                    OutboxKind.LIST -> client.addTodo(base, settings.effectiveIdentity, item.text)
                     OutboxKind.PHOTO -> {
                         val file = File(item.imagePath)
                         check(file.exists()) { "Queued photo missing" }
                         client.uploadImage(
                             base,
-                            settings.identity,
+                            settings.effectiveIdentity,
                             Uri.fromFile(file),
                             item.filename,
                             item.session,

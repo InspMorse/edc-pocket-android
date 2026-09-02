@@ -24,7 +24,7 @@ class HostConnector(
         if (order.isEmpty()) return null
         for (preset in order) {
             val health = runCatching {
-                client.probeHealth(preset.url, settings.identity)
+                client.probeHealth(preset.url, settings.effectiveIdentity)
             }.getOrNull() ?: continue
             if (!health.ok) continue
             if (settings.preset != preset) store.rememberWorkingPreset(preset)
@@ -36,6 +36,6 @@ class HostConnector(
     suspend fun reprobe(settings: EdcSettings): HostHealth? {
         val base = settings.baseUrl
         if (base.isBlank()) return null
-        return runCatching { client.probeHealth(base, settings.identity) }.getOrNull()
+        return runCatching { client.probeHealth(base, settings.effectiveIdentity) }.getOrNull()
     }
 }

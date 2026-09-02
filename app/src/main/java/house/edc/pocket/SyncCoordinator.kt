@@ -29,7 +29,7 @@ class SyncCoordinator(
 ) {
     suspend fun sync(settings: EdcSettings, healthHint: HostHealth? = null): SyncOutcome {
         val base = settings.baseUrl
-        val identity = settings.identity
+        val identity = settings.effectiveIdentity
         if (base.isBlank()) return SyncOutcome.empty()
 
         val hostKey = cache.hostKey(base, identity)
@@ -126,13 +126,13 @@ class SyncCoordinator(
     suspend fun loadCached(settings: EdcSettings): HostSnapshot? {
         val base = settings.baseUrl
         if (base.isBlank()) return null
-        return cache.loadSnapshot(cache.hostKey(base, settings.identity), base)
+        return cache.loadSnapshot(cache.hostKey(base, settings.effectiveIdentity), base)
     }
 
     suspend fun lastSyncedAt(settings: EdcSettings): Long? {
         val base = settings.baseUrl
         if (base.isBlank()) return null
-        return cache.getLastSynced(cache.hostKey(base, settings.identity))
+        return cache.getLastSynced(cache.hostKey(base, settings.effectiveIdentity))
     }
 
     private suspend fun fetchSafe(

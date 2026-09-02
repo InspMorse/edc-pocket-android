@@ -6,6 +6,7 @@ object SyncPolicy {
         if (health?.capabilities?.push == true) return 30_000L
         return when (tab) {
             PocketTab.CLIP, PocketTab.LIST -> 5_000L
+            PocketTab.DASHBOARD -> 30_000L
             else -> 15_000L
         }
     }
@@ -24,5 +25,6 @@ enum class PocketTab(val label: String) {
     CLIP("Clip"),
     LIST("List"),
     SEND("Send"),
+    DASHBOARD("House"),
     SETTINGS("Settings"),
 }

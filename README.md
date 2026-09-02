@@ -48,8 +48,9 @@ CI runs on every push/PR — see [`.github/workflows/ci.yml`](.github/workflows/
 - **v1.1** — onboarding, swipe actions, pins, list sort, rich clips, host theme accent, tablet layout
 - **v1.3** — Room cache, conditional fetch, outbox v2, connection doctor, staleness UI, SSE client
 - **v1.5** — widget v2, lock screen widget, QS tiles, persistent preview, share v2, NFC, automation API
+- **v1.7** — multi-host profiles, mDNS discovery, MagicDNS, QR pairing, dashboard WebView, guest mode, biometric lock, TLS pinning
 
-See **[ROADMAP.md](ROADMAP.md)** — **v1.5** shipped (Phase 9); Phases **10–12** remain toward **2.0**.  
+See **[ROADMAP.md](ROADMAP.md)** — **v1.7** shipped (Phase 10); Phases **11–12** remain toward **2.0**.  
 Automation intents: **[AUTOMATION.md](AUTOMATION.md)**
 
 Client only. Never hosts.

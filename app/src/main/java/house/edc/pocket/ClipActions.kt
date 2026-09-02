@@ -18,7 +18,7 @@ object ClipActions {
         val base = settings.baseUrl
         if (base.isBlank()) return null
         val client = EdcClient(app.contentResolver)
-        val snap = runCatching { client.load(base, settings.identity) }.getOrNull() ?: return null
+        val snap = runCatching { client.load(base, settings.effectiveIdentity) }.getOrNull() ?: return null
         val entry = snap.latest ?: snap.history.firstOrNull() ?: return null
         store.save(entry)
         SurfaceEffects.afterClipSaved(app, settings)

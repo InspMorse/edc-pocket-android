@@ -23,7 +23,7 @@ class ConnectionDoctor(
 ) {
     suspend fun run(settings: EdcSettings): ConnectionReport {
         val base = settings.baseUrl
-        val identity = settings.identity
+        val identity = settings.effectiveIdentity
         if (base.isBlank()) {
             return ConnectionReport(
                 hostUrl = "",

@@ -123,7 +123,7 @@ class ShareActivity : ComponentActivity() {
             val name = uri.lastPathSegment ?: "photo_${index + 1}.jpg"
             val result = withContext(Dispatchers.IO) {
                 runCatching {
-                    client.uploadImage(settings.baseUrl, settings.identity, uri, name, session)
+                    client.uploadImage(settings.baseUrl, settings.effectiveIdentity, uri, name, session)
                 }
             }
             if (result.isSuccess) {
@@ -159,8 +159,8 @@ class ShareActivity : ComponentActivity() {
         val result = withContext(Dispatchers.IO) {
             runCatching {
                 when (kind) {
-                    OutboxKind.CLIP -> client.sendText(settings.baseUrl, settings.identity, text)
-                    OutboxKind.LIST -> client.addTodo(settings.baseUrl, settings.identity, text)
+                    OutboxKind.CLIP -> client.sendText(settings.baseUrl, settings.effectiveIdentity, text)
+                    OutboxKind.LIST -> client.addTodo(settings.baseUrl, settings.effectiveIdentity, text)
                     OutboxKind.PHOTO -> error("Unexpected")
                 }
             }

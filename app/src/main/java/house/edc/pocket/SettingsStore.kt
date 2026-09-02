@@ -40,15 +40,25 @@ data class EdcSettings(
     val persistentClipPreview: Boolean = false,
     val nfcAction: NfcAction = NfcAction.COPY_CLIP,
     val pinnedSessions: List<String> = emptyList(),
+    val profiles: List<HostProfile> = HostProfile.defaults(),
+    val activeProfileId: String = "home",
+    val magicDnsHost: String = "",
+    val homeWifiSsids: List<String> = emptyList(),
+    val guestMode: Boolean = false,
+    val guestIdentity: String = "",
+    val guestExpiresAt: Long = 0L,
+    val biometricLock: Boolean = false,
+    val showDashboardTab: Boolean = false,
+    val tlsPinSha256: String = "",
 ) {
+    val effectiveIdentity: String
+        get() = HostUrlResolver.effectiveIdentity(this)
+
+    val guestActive: Boolean
+        get() = HostUrlResolver.guestActive(this)
+
     val baseUrl: String
-        get() {
-            val raw = when (preset) {
-                HostPreset.CUSTOM -> customUrl.trim().trimEnd('/')
-                else -> preset.url
-            }
-            return if (useHttps) raw.replaceFirst("http://", "https://") else raw
-        }
+        get() = HostUrlResolver.baseUrl(this)
 }
 
 class SettingsStore(private val context: Context) {
@@ -69,6 +79,16 @@ class SettingsStore(private val context: Context) {
     private val persistentPreviewKey = booleanPreferencesKey("persistent_clip_preview")
     private val nfcActionKey = stringPreferencesKey("nfc_action")
     private val pinnedSessionsKey = stringPreferencesKey("pinned_sessions")
+    private val profilesKey = stringPreferencesKey("host_profiles_json")
+    private val activeProfileKey = stringPreferencesKey("active_profile_id")
+    private val magicDnsKey = stringPreferencesKey("magic_dns_host")
+    private val homeWifiKey = stringPreferencesKey("home_wifi_ssids")
+    private val guestModeKey = booleanPreferencesKey("guest_mode")
+    private val guestIdentityKey = stringPreferencesKey("guest_identity")
+    private val guestExpiresKey = stringPreferencesKey("guest_expires_at")
+    private val biometricLockKey = booleanPreferencesKey("biometric_lock")
+    private val showDashboardKey = booleanPreferencesKey("show_dashboard_tab")
+    private val tlsPinKey = stringPreferencesKey("tls_pin_sha256")
 
     val settings: Flow<EdcSettings> = context.dataStore.data.map { prefs ->
         val legacyInstall = prefs.asMap().keys.any { it != onboardingKey }
@@ -103,6 +123,17 @@ class SettingsStore(private val context: Context) {
                 NfcAction.valueOf(prefs[nfcActionKey] ?: "COPY_CLIP")
             }.getOrDefault(NfcAction.COPY_CLIP),
             pinnedSessions = parsePinnedSessions(prefs[pinnedSessionsKey].orEmpty()),
+            profiles = HostProfile.listFromJson(prefs[profilesKey].orEmpty())
+                .ifEmpty { HostProfile.defaults() },
+            activeProfileId = prefs[activeProfileKey] ?: "home",
+            magicDnsHost = prefs[magicDnsKey] ?: "",
+            homeWifiSsids = parsePinnedSessions(prefs[homeWifiKey].orEmpty()),
+            guestMode = prefs[guestModeKey] ?: false,
+            guestIdentity = prefs[guestIdentityKey] ?: "",
+            guestExpiresAt = prefs[guestExpiresKey]?.toLongOrNull() ?: 0L,
+            biometricLock = prefs[biometricLockKey] ?: false,
+            showDashboardTab = prefs[showDashboardKey] ?: false,
+            tlsPinSha256 = prefs[tlsPinKey] ?: "",
         )
     }
 
@@ -176,5 +207,69 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setPinnedSessions(value: List<String>) {
         context.dataStore.edit { it[pinnedSessionsKey] = formatPinnedSessions(value) }
+    }
+
+    suspend fun setProfiles(value: List<HostProfile>) {
+        context.dataStore.edit { it[profilesKey] = HostProfile.listToJson(value) }
+    }
+
+    suspend fun setActiveProfileId(value: String) {
+        context.dataStore.edit { it[activeProfileKey] = value }
+    }
+
+    suspend fun setMagicDnsHost(value: String) {
+        context.dataStore.edit { it[magicDnsKey] = value.trim() }
+    }
+
+    suspend fun setHomeWifiSsids(value: List<String>) {
+        context.dataStore.edit { it[homeWifiKey] = formatPinnedSessions(value) }
+    }
+
+    suspend fun setGuestMode(enabled: Boolean, identity: String, expiresAt: Long) {
+        context.dataStore.edit {
+            it[guestModeKey] = enabled
+            it[guestIdentityKey] = identity
+            it[guestExpiresKey] = expiresAt.toString()
+        }
+    }
+
+    suspend fun clearGuestMode() {
+        context.dataStore.edit {
+            it[guestModeKey] = false
+            it[guestIdentityKey] = ""
+            it[guestExpiresKey] = "0"
+        }
+    }
+
+    suspend fun setBiometricLock(value: Boolean) {
+        context.dataStore.edit { it[biometricLockKey] = value }
+    }
+
+    suspend fun setShowDashboardTab(value: Boolean) {
+        context.dataStore.edit { it[showDashboardKey] = value }
+    }
+
+    suspend fun setTlsPinSha256(value: String) {
+        context.dataStore.edit { it[tlsPinKey] = TlsPinning.normalizePin(value) }
+    }
+
+    suspend fun applyPairPayload(payload: PairQrPayload) {
+        context.dataStore.edit { prefs ->
+            val current = HostProfile.listFromJson(prefs[profilesKey].orEmpty())
+                .ifEmpty { HostProfile.defaults() }
+            val name = payload.name.ifBlank { "Paired host" }
+            val id = name.lowercase().replace(Regex("[^a-z0-9]+"), "_").ifBlank { "paired" }
+            val updated = current.filter { it.id != id } + HostProfile(
+                id = id,
+                name = name,
+                url = normalizeHostUrl(payload.url),
+                useHttps = payload.url.startsWith("https://", ignoreCase = true),
+            )
+            prefs[profilesKey] = HostProfile.listToJson(updated)
+            prefs[activeProfileKey] = id
+            if (payload.pinSha256.isNotBlank()) {
+                prefs[tlsPinKey] = TlsPinning.normalizePin(payload.pinSha256)
+            }
+        }
     }
 }
