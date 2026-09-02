@@ -49,6 +49,12 @@ interface SyncCacheDao {
 
     @Query("DELETE FROM cached_endpoints WHERE cacheKey LIKE :hostKeyPrefix || '%'")
     suspend fun clearHost(hostKeyPrefix: String)
+
+    @Query("DELETE FROM cached_endpoints")
+    suspend fun clearAllEndpoints()
+
+    @Query("DELETE FROM sync_meta")
+    suspend fun clearAllMeta()
 }
 
 @Database(
@@ -134,6 +140,11 @@ class SyncCache(context: Context) {
 
     suspend fun clearHost(hostKey: String) {
         dao.clearHost(hostKey)
+    }
+
+    suspend fun clearAll() {
+        dao.clearAllEndpoints()
+        dao.clearAllMeta()
     }
 
     companion object {

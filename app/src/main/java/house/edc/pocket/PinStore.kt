@@ -38,6 +38,13 @@ class PinStore(private val context: Context) {
         }
     }
 
+    suspend fun clear() {
+        context.pinDataStore.edit {
+            it.remove(clipsKey)
+            it.remove(todosKey)
+        }
+    }
+
     companion object {
         fun clipKey(entry: ClipEntry): String = "${entry.id}|${entry.ts}"
     }

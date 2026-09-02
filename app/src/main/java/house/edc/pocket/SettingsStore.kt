@@ -50,6 +50,7 @@ data class EdcSettings(
     val biometricLock: Boolean = false,
     val showDashboardTab: Boolean = false,
     val tlsPinSha256: String = "",
+    val telemetryOptIn: Boolean = false,
 ) {
     val effectiveIdentity: String
         get() = HostUrlResolver.effectiveIdentity(this)
@@ -89,6 +90,7 @@ class SettingsStore(private val context: Context) {
     private val biometricLockKey = booleanPreferencesKey("biometric_lock")
     private val showDashboardKey = booleanPreferencesKey("show_dashboard_tab")
     private val tlsPinKey = stringPreferencesKey("tls_pin_sha256")
+    private val telemetryKey = booleanPreferencesKey("telemetry_opt_in")
 
     val settings: Flow<EdcSettings> = context.dataStore.data.map { prefs ->
         val legacyInstall = prefs.asMap().keys.any { it != onboardingKey }
@@ -134,6 +136,7 @@ class SettingsStore(private val context: Context) {
             biometricLock = prefs[biometricLockKey] ?: false,
             showDashboardTab = prefs[showDashboardKey] ?: false,
             tlsPinSha256 = prefs[tlsPinKey] ?: "",
+            telemetryOptIn = prefs[telemetryKey] ?: false,
         )
     }
 
@@ -251,6 +254,14 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setTlsPinSha256(value: String) {
         context.dataStore.edit { it[tlsPinKey] = TlsPinning.normalizePin(value) }
+    }
+
+    suspend fun setTelemetryOptIn(value: Boolean) {
+        context.dataStore.edit { it[telemetryKey] = value }
+    }
+
+    suspend fun resetToDefaults() {
+        context.dataStore.edit { it.clear() }
     }
 
     suspend fun applyPairPayload(payload: PairQrPayload) {

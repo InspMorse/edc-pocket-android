@@ -79,6 +79,10 @@ class TodoExtrasStore(private val context: Context) {
             prefs[key] = extrasToJson(map)
         }
     }
+
+    suspend fun clear() {
+        context.todoExtrasStore.edit { it[key] = "{}" }
+    }
 }
 
 internal fun parseExtrasJson(raw: String): Map<String, TodoExtra> {

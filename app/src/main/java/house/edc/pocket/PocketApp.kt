@@ -135,12 +135,17 @@ fun PocketApp(
     store: SettingsStore,
     client: EdcClient,
     syncCoordinator: SyncCoordinator,
+    syncCache: SyncCache,
     outboxStore: OutboxStore,
     outboxProcessor: OutboxProcessor,
     hostConnector: HostConnector,
     networkMonitor: NetworkMonitor,
     connectionDoctor: ConnectionDoctor,
     homeHintMonitor: HomeHintMonitor,
+    auditLogStore: AuditLogStore,
+    telemetryStore: TelemetryStore,
+    todoExtrasStore: TodoExtrasStore,
+    pinStore: PinStore,
     launchAction: LaunchAction = LaunchAction.NONE,
     launchText: String = "",
     onLaunchActionHandled: () -> Unit = {},
@@ -148,11 +153,12 @@ fun PocketApp(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pinStore = remember(context) { PinStore(context) }
-    val todoExtrasStore = remember(context) { TodoExtrasStore(context) }
     val todoExtras by todoExtrasStore.extras.collectAsState(initial = emptyMap())
     val pinnedClipKeys by pinStore.pinnedClipKeys.collectAsState(initial = emptySet())
     val pinnedTodoIds by pinStore.pinnedTodoIds.collectAsState(initial = emptySet())
+    val auditEntries by auditLogStore.entries.collectAsState(initial = emptyList())
+    val telemetryEvents by telemetryStore.events.collectAsState(initial = emptyList())
+    var rateLimitHint by remember { mutableStateOf<HostRateHint?>(null) }
     var hostHealth by remember { mutableStateOf<HostHealth?>(null) }
 
     if (!settings.onboardingComplete) {
@@ -260,6 +266,15 @@ fun PocketApp(
                     if (outcome.stale && offlineBaseline == null && outboxItems.isNotEmpty()) {
                         offlineBaseline = previousFingerprint
                     }
+                    if (outcome.fromNetwork) {
+                        scope.launch {
+                            telemetryStore.record(
+                                TelemetryKind.SYNC_OK,
+                                "refresh",
+                                settings.telemetryOptIn,
+                            )
+                        }
+                    }
                     if (outcome.health != null && outcome.fromNetwork) {
                         PushRegistration.registerIfPossible(context, client, settings, outcome.health)
                         if (outcome.health.tlsPinSha256.isNotBlank()) {
@@ -269,6 +284,19 @@ fun PocketApp(
                     SurfaceEffects.afterSnapshot(context, outcome.snapshot, settings)
                 },
                 onFailure = {
+                    scope.launch {
+                        auditLogStore.append(
+                            kind = AuditKind.SYNC,
+                            identity = settings.effectiveIdentity,
+                            detail = it.message ?: "sync failed",
+                            success = false,
+                        )
+                        telemetryStore.record(
+                            TelemetryKind.SYNC_FAIL,
+                            it.message ?: "sync",
+                            settings.telemetryOptIn,
+                        )
+                    }
                     val cached = withContext(Dispatchers.IO) { syncCoordinator.loadCached(settings) }
                     if (cached != null) {
                         snapshot = cached
@@ -293,6 +321,19 @@ fun PocketApp(
         suspend fun flushOutbox(notify: Boolean = true): Int {
             val sent = withContext(Dispatchers.IO) { outboxProcessor.flush(settings) }
             if (sent > 0) {
+                scope.launch {
+                    auditLogStore.append(
+                        kind = AuditKind.OUTBOX,
+                        identity = settings.effectiveIdentity,
+                        detail = "sent $sent queued item(s)",
+                        success = true,
+                    )
+                    telemetryStore.record(
+                        TelemetryKind.OUTBOX_SENT,
+                        "count=$sent",
+                        settings.telemetryOptIn,
+                    )
+                }
                 refresh(silent = true)
                 if (notify) {
                     val msg = if (sent == 1) "Sent queued item" else "Sent $sent queued items"
@@ -319,11 +360,45 @@ fun PocketApp(
                 onSuccess = {
                     error = null
                     haptic()
+                    scope.launch {
+                        val auditKind = when {
+                            okMessage?.contains("clip", ignoreCase = true) == true -> AuditKind.SEND_CLIP
+                            okMessage?.contains("list", ignoreCase = true) == true -> AuditKind.SEND_LIST
+                            okMessage?.contains("photo", ignoreCase = true) == true ||
+                                okMessage?.contains("file", ignoreCase = true) == true -> AuditKind.UPLOAD
+                            else -> AuditKind.SYNC
+                        }
+                        auditLogStore.append(
+                            kind = auditKind,
+                            identity = settings.effectiveIdentity,
+                            detail = okMessage ?: "sent",
+                            success = true,
+                        )
+                        telemetryStore.record(
+                            TelemetryKind.CONNECT_OK,
+                            "send",
+                            settings.telemetryOptIn,
+                        )
+                    }
                     if (okMessage != null) snackbar.showSnackbar(okMessage)
                     refresh()
                 },
                 onFailure = {
-                    withContext(Dispatchers.IO) { outboxStore.enqueue(enqueueItem()) }
+                    val item = withContext(Dispatchers.IO) { enqueueItem() }
+                    withContext(Dispatchers.IO) { outboxStore.enqueue(item) }
+                    scope.launch {
+                        auditLogStore.append(
+                            kind = AuditKind.OUTBOX,
+                            identity = settings.effectiveIdentity,
+                            detail = item.label(),
+                            success = false,
+                        )
+                        telemetryStore.record(
+                            TelemetryKind.OUTBOX_FAIL,
+                            item.kind.name,
+                            settings.telemetryOptIn,
+                        )
+                    }
                     error = null
                     snackbar.showSnackbar("Queued — will send when host is back")
                 },
@@ -410,11 +485,42 @@ fun PocketApp(
             result.fold(
                 onSuccess = {
                     error = null
+                    rateLimitHint = null
                     if (okMessage != null) snackbar.showSnackbar(okMessage)
                     refresh()
                 },
-                onFailure = {
-                    error = hostFailureMessage(settings, it.message)
+                onFailure = { err ->
+                    val rate = err as? HostRateLimitedException
+                    if (rate != null) {
+                        rateLimitHint = rate.hint
+                        scope.launch {
+                            auditLogStore.append(
+                                kind = AuditKind.RATE_LIMIT,
+                                identity = settings.effectiveIdentity,
+                                detail = rate.hint.message,
+                                success = false,
+                            )
+                            telemetryStore.record(
+                                TelemetryKind.CONNECT_FAIL,
+                                "rate_limit",
+                                settings.telemetryOptIn,
+                            )
+                        }
+                    }
+                    scope.launch {
+                        auditLogStore.append(
+                            kind = AuditKind.HOST_ERROR,
+                            identity = settings.effectiveIdentity,
+                            detail = err.message ?: "Host call failed",
+                            success = false,
+                        )
+                        telemetryStore.record(
+                            TelemetryKind.CONNECT_FAIL,
+                            err.message ?: "host_call",
+                            settings.telemetryOptIn,
+                        )
+                    }
+                    error = hostFailureMessage(settings, err.message)
                 },
             )
         }
@@ -662,7 +768,8 @@ fun PocketApp(
                         }
                     }
                 }
-                val caps = hostHealth?.capabilities ?: HostCapabilities.ALL
+                val caps = FeatureFlags.effectiveCapabilities(hostHealth)
+                val featureFlagNotes = FeatureFlags.disabledSummary(hostHealth)
                 val configuration = LocalConfiguration.current
                 val wideLayout = configuration.screenWidthDp >= 840
                 if (wideLayout && (currentTab == PocketTab.CLIP || currentTab == PocketTab.LIST)) {
@@ -1298,6 +1405,41 @@ fun PocketApp(
                                 store.setActiveProfileId(id)
                                 refresh()
                             }
+                        },
+                        auditEntries = auditEntries,
+                        telemetrySummaryText = telemetrySummary(telemetryEvents),
+                        rateLimitHint = rateLimitHint ?: hostHealth?.rateLimitHint
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { HostRateHint(it) },
+                        featureFlagNotes = featureFlagNotes,
+                        onTelemetryOptIn = { scope.launch { store.setTelemetryOptIn(it) } },
+                        onExportData = {
+                            val json = DataExport.buildJson(
+                                context = context,
+                                settings = settings,
+                                syncCache = syncCache,
+                                auditLog = auditLogStore,
+                                telemetry = telemetryStore,
+                                outbox = outboxStore,
+                            )
+                            DataExport.shareJson(context, json)
+                            snackbar.showSnackbar("Export ready to share")
+                        },
+                        onExportAudit = { copyAuditLog(context, auditEntries) },
+                        onClearAudit = { scope.launch { auditLogStore.clear() } },
+                        onResetApp = {
+                            AppReset.resetAll(
+                                context = context,
+                                store = store,
+                                outbox = outboxStore,
+                                auditLog = auditLogStore,
+                                telemetry = telemetryStore,
+                                syncCache = syncCache,
+                                pinStore = pinStore,
+                                todoExtras = todoExtrasStore,
+                                settings = settings,
+                            )
+                            snackbar.showSnackbar("App data cleared")
                         },
                     )
                 }
@@ -2069,6 +2211,15 @@ private fun SettingsPane(
     discovering: Boolean,
     onDiscoverHosts: () -> Unit,
     onSelectDiscovered: (DiscoveredHost) -> Unit,
+    auditEntries: List<AuditEntry>,
+    telemetrySummaryText: String,
+    rateLimitHint: HostRateHint?,
+    featureFlagNotes: List<String>,
+    onTelemetryOptIn: (Boolean) -> Unit,
+    onExportData: suspend () -> Unit,
+    onExportAudit: () -> Unit,
+    onClearAudit: () -> Unit,
+    onResetApp: suspend () -> Unit,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -2459,6 +2610,18 @@ private fun SettingsPane(
         OutlinedButton(onClick = onFindHost, modifier = Modifier.fillMaxWidth()) {
             Text("Find host (Home, then Away)")
         }
+        TrustDiagnosticsSection(
+            settings = settings,
+            auditEntries = auditEntries,
+            telemetrySummaryText = telemetrySummaryText,
+            rateLimitHint = rateLimitHint,
+            featureFlagNotes = featureFlagNotes,
+            onTelemetryOptIn = onTelemetryOptIn,
+            onExportData = onExportData,
+            onExportAudit = onExportAudit,
+            onClearAudit = onClearAudit,
+            onResetApp = onResetApp,
+        )
         SectionLabel("Connection doctor")
         Text(
             text = "Checks each host endpoint and latency. Copy the log if something fails.",
@@ -2512,6 +2675,20 @@ private fun SettingsPane(
                 text = hostHealth.summary(),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            if (hostHealth.apiVersion.isNotBlank()) {
+                Text(
+                    text = "Host API ${hostHealth.apiVersion}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            if (hostHealth.minClientVersion.isNotBlank()) {
+                Text(
+                    text = "Requires client ${hostHealth.minClientVersion}+",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
             hostHealth.capabilities.summaryLines().forEach { line ->
                 Text(
                     text = line,

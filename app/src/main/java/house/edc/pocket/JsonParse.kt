@@ -107,7 +107,14 @@ internal fun parseHealth(raw: String): HostHealth {
     if (active != null && health.hostName.isBlank()) {
         health = health.copy(hostName = active.str("name", "hostname"))
     }
-    return health
+    val rateHint = parseRateHintFromHealth(root)
+    val flags = parseFeatureFlags(root)
+    return health.copy(
+        apiVersion = root.str("api_version", "edc_api_version"),
+        minClientVersion = root.str("min_client_version", "min_android_version"),
+        rateLimitHint = rateHint?.message ?: root.str("rate_limit_message", "abuse_hint"),
+        featureFlags = flags,
+    )
 }
 
 internal fun parseCapabilitiesJson(raw: String): HostCapabilities {

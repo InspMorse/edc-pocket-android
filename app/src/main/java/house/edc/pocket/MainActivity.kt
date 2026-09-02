@@ -57,6 +57,10 @@ class MainActivity : FragmentActivity() {
         val networkMonitor = NetworkMonitor(this)
         val connectionDoctor = ConnectionDoctor(client)
         val homeHintMonitor = HomeHintMonitor(this)
+        val auditLogStore = AuditLogStore(this)
+        val telemetryStore = TelemetryStore(this)
+        val pinStore = PinStore(this)
+        val todoExtrasStore = TodoExtrasStore(this)
         lifecycleScope.launch {
             val settings = store.settings.first()
             applyTls(client, settings)
@@ -90,12 +94,17 @@ class MainActivity : FragmentActivity() {
                     store = store,
                     client = client,
                     syncCoordinator = syncCoordinator,
+                    syncCache = syncCache,
                     outboxStore = outboxStore,
                     outboxProcessor = outboxProcessor,
                     hostConnector = hostConnector,
                     networkMonitor = networkMonitor,
                     connectionDoctor = connectionDoctor,
                     homeHintMonitor = homeHintMonitor,
+                    auditLogStore = auditLogStore,
+                    telemetryStore = telemetryStore,
+                    todoExtrasStore = todoExtrasStore,
+                    pinStore = pinStore,
                     launchAction = launchAction,
                     launchText = launchText,
                     onLaunchActionHandled = {

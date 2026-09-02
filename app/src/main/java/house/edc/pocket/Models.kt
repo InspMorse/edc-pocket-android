@@ -86,6 +86,10 @@ data class HostHealth(
     val themeAccent: String = "",
     val logoUrl: String = "",
     val tlsPinSha256: String = "",
+    val apiVersion: String = "",
+    val minClientVersion: String = "",
+    val rateLimitHint: String = "",
+    val featureFlags: Map<String, Boolean> = emptyMap(),
 ) {
     fun summary(): String {
         if (!ok) return "Host unreachable"

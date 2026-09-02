@@ -49,9 +49,13 @@ class EdcClient(
         if (ifNoneMatch.isNotBlank()) builder.addHeader("If-None-Match", ifNoneMatch)
         if (ifModifiedSince.isNotBlank()) builder.addHeader("If-Modified-Since", ifModifiedSince)
         http.newCall(builder.build()).execute().use { res ->
+            val bodyText = if (res.code == 304) "" else res.body?.string().orEmpty()
+            rateHintFromHttp(res.code, res.header("Retry-After"), bodyText)?.let {
+                throw HostRateLimitedException(it)
+            }
             return EndpointResponse(
                 code = res.code,
-                body = if (res.code == 304) "" else res.body?.string().orEmpty(),
+                body = bodyText,
                 etag = res.header("ETag").orEmpty(),
                 lastModified = res.header("Last-Modified").orEmpty(),
             )
@@ -404,6 +408,10 @@ class EdcClient(
             .post(body)
             .build()
         http.newCall(req).execute().use { res ->
+            val bodyText = res.body?.string().orEmpty()
+            rateHintFromHttp(res.code, res.header("Retry-After"), bodyText)?.let {
+                throw HostRateLimitedException(it)
+            }
             if (!res.isSuccessful) error("Request failed (${res.code})")
         }
     }

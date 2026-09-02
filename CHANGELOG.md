@@ -7,7 +7,24 @@ Versioning: **0.x** = pre-release phases · **1.0** = Phase 6 trust release · *
 
 ---
 
-## [1.9.0] — Phase 11
+## [2.0.0] — Phase 12
+
+### Added
+
+- Structured audit log — sends, sync, outbox, rate limits (Settings → Trust & diagnostics)
+- Host rate-limit and abuse hints from `/api/health` and HTTP 429
+- Data export — settings summary, cache counts, audit + telemetry JSON bundle
+- Clear all app data — cancels WorkManager jobs, clears cache/outbox/pins without orphans
+- Golden Compose UI tests for nav labels and trust diagnostics section
+- Feature flags from host merged with capabilities
+- Opt-in anonymised telemetry (local-only until export)
+- [SECURITY.md](SECURITY.md) dependency cadence · [HOST_API.md](HOST_API.md) breaking-change policy · [BETA.md](BETA.md) beta channel guide
+
+### Changed
+
+- Version **2.0** (`versionCode` 13) — roadmap complete through Phase 12
+
+---
 
 ### Added
 
