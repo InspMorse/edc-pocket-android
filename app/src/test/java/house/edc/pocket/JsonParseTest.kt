@@ -68,4 +68,49 @@ class JsonParseTest {
         assertTrue(parseTodos("<html>nope</html>").isEmpty())
         assertTrue(parseDrops("{}").isEmpty())
     }
+
+    @Test
+    fun clipsUseUpdatedByAndCreatedAt() {
+        val clips = parseClips(
+            """{"items":[{"text":"link","updated_by":"Mhairi","created_at":"2026-09-02T12:00:00Z"}]}""",
+        )
+        assertEquals("Mhairi", clips.single().from)
+        assertEquals("2026-09-02T12:00:00Z", clips.single().ts)
+    }
+
+    @Test
+    fun healthFromHostJson() {
+        val health = parseHealth(
+            """
+            {
+              "ok": true,
+              "version": "0.22.1",
+              "host_name": "edc-home",
+              "dashboard_url": "http://192.168.0.99:8765/"
+            }
+            """.trimIndent(),
+        )
+        assertTrue(health.ok)
+        assertEquals("0.22.1", health.version)
+        assertEquals("edc-home", health.hostName)
+        assertEquals("edc-home · v0.22.1", health.summary())
+    }
+
+    @Test
+    fun healthFromActiveHost() {
+        val health = parseHealth(
+            """{"ok":true,"active_host":{"name":"away-node"},"app_version":"0.22.0"}""",
+        )
+        assertEquals("away-node", health.hostName)
+        assertEquals("0.22.0", health.version)
+    }
+
+    @Test
+    fun dropsResolveRelativePath() {
+        val drops = parseDrops(
+            """{"items":[{"filename":"photo.jpg","path":"api/incoming/abc","from":"Mike"}]}""",
+            "http://192.168.0.99:8765",
+        )
+        assertEquals("api/incoming/abc", drops.single().path)
+    }
 }

@@ -2,6 +2,7 @@ package house.edc.pocket
 
 import android.content.ClipData
 import android.content.ClipboardManager
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -59,6 +61,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -95,6 +98,8 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -106,6 +111,9 @@ private enum class PocketTab(val label: String) {
 }
 
 private val identities = listOf("Mike", "Mhairi")
+private val clipFilters = listOf("All", "Mike", "Mhairi", "EDC")
+private const val pollMs = 5_000L
+private const val clipPreviewChars = 220
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -124,30 +132,37 @@ fun PocketApp(
         var loading by remember { mutableStateOf(false) }
         var status by remember { mutableStateOf<String?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
+        var stale by remember { mutableStateOf(false) }
         val resumeTick = rememberResumeTick()
 
-        suspend fun refresh() {
+        suspend fun refresh(silent: Boolean = false) {
             val base = settings.baseUrl
             if (base.isBlank()) {
                 error = "Set a host URL in Settings."
                 status = null
-                snapshot = HostSnapshot()
+                if (!silent) snapshot = HostSnapshot()
+                stale = false
                 return
             }
-            loading = true
+            if (!silent) loading = true
             val result = withContext(Dispatchers.IO) {
                 runCatching { client.load(base, settings.identity) }
             }
-            loading = false
+            if (!silent) loading = false
             result.fold(
                 onSuccess = {
                     snapshot = it
                     error = null
+                    stale = false
                     status = "Connected as ${settings.identity}"
                 },
                 onFailure = {
                     error = it.message ?: "Host unreachable"
                     status = null
+                    stale = snapshot.latest != null ||
+                        snapshot.history.isNotEmpty() ||
+                        snapshot.todos.isNotEmpty() ||
+                        snapshot.drops.isNotEmpty()
                 },
             )
         }
@@ -175,6 +190,13 @@ fun PocketApp(
 
         LaunchedEffect(settings.baseUrl, settings.identity, resumeTick) {
             refresh()
+        }
+
+        LaunchedEffect(settings.baseUrl, settings.identity) {
+            while (isActive) {
+                delay(pollMs)
+                refresh(silent = true)
+            }
         }
 
         Scaffold(
@@ -248,11 +270,18 @@ fun PocketApp(
                         color = EdcCyan,
                     )
                 }
-                val banner = error ?: status
+                val banner = when {
+                    stale && error != null -> "$error · showing last known"
+                    else -> error ?: status
+                }
                 if (banner != null) {
                     Text(
                         text = banner,
-                        color = if (error != null) MaterialTheme.colorScheme.error else EdcMuted,
+                        color = when {
+                            stale -> Color(0xFFFFBB33)
+                            error != null -> MaterialTheme.colorScheme.error
+                            else -> EdcMuted
+                        },
                         style = MaterialTheme.typography.bodySmall,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
@@ -266,6 +295,14 @@ fun PocketApp(
                             clipboard.setPrimaryClip(ClipData.newPlainText("EDC", text))
                             scope.launch { snackbar.showSnackbar("Copied") }
                         },
+                        onShare = { text ->
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            }
+                            context.startActivity(Intent.createChooser(send, "Share clip"))
+                        },
+                        onOpenUrl = { openUrl(context, it) },
                         onSend = { text ->
                             scope.launch {
                                 hostCall("Sent to clipboard") {
@@ -301,6 +338,33 @@ fun PocketApp(
                                 }
                             }
                         },
+                        onDelete = { item ->
+                            snapshot = snapshot.copy(
+                                todos = snapshot.todos.filter { it.id != item.id },
+                            )
+                            scope.launch {
+                                hostCall("Removed") {
+                                    client.deleteTodo(settings.baseUrl, settings.identity, item.id)
+                                }
+                            }
+                        },
+                        onShareList = {
+                            scope.launch {
+                                val base = settings.baseUrl
+                                if (base.isBlank()) {
+                                    error = "Set a host URL in Settings."
+                                    return@launch
+                                }
+                                val text = withContext(Dispatchers.IO) {
+                                    client.todoPlainText(base, settings.identity)
+                                }
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, text)
+                                }
+                                context.startActivity(Intent.createChooser(send, "Share list"))
+                            }
+                        },
                     )
                     PocketTab.SEND -> SendPane(
                         drops = snapshot.drops,
@@ -318,7 +382,7 @@ fun PocketApp(
                                 }
                             }
                         },
-                        onUpload = { uri, name ->
+                        onUpload = { uri, name, session ->
                             scope.launch {
                                 hostCall("Photo sent to Incoming") {
                                     client.uploadImage(
@@ -326,8 +390,15 @@ fun PocketApp(
                                         settings.identity,
                                         uri,
                                         name,
+                                        session,
                                     )
                                 }
+                            }
+                        },
+                        onOpenDrop = { drop ->
+                            val url = client.incomingOpenUrl(settings.baseUrl, drop)
+                            if (url != null) openUrl(context, url) else scope.launch {
+                                snackbar.showSnackbar("No download link for this file")
                             }
                         },
                     )
@@ -345,19 +416,37 @@ fun PocketApp(
                                 }
                                 loading = true
                                 val result = withContext(Dispatchers.IO) {
-                                    runCatching { client.probe(base, settings.identity) }
+                                    runCatching { client.probeHealth(base, settings.identity) }
                                 }
                                 loading = false
                                 result.fold(
                                     onSuccess = {
                                         error = null
-                                        status = it
-                                        snackbar.showSnackbar(it)
+                                        status = it.summary()
+                                        snackbar.showSnackbar(it.summary())
                                     },
                                     onFailure = {
                                         error = it.message ?: "Host unreachable"
                                     },
                                 )
+                            }
+                        },
+                        onFindHost = {
+                            scope.launch {
+                                loading = true
+                                val found = withContext(Dispatchers.IO) {
+                                    client.findReachableHost(settings, settings.identity)
+                                }
+                                loading = false
+                                if (found == null) {
+                                    error = "No host answered on Home or Away."
+                                    return@launch
+                                }
+                                found.preset?.let { store.rememberWorkingPreset(it) }
+                                error = null
+                                status = found.health.summary() + " · ${found.baseUrl}"
+                                snackbar.showSnackbar("Using ${found.preset?.label ?: "host"}")
+                                refresh()
                             }
                         },
                     )
@@ -381,34 +470,72 @@ private fun rememberResumeTick(): Int {
     return tick
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun ClipPane(
     latest: ClipEntry?,
     history: List<ClipEntry>,
     onCopy: (String) -> Unit,
+    onShare: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
     onSend: (String) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
-    val older = history.filter { it.id != latest?.id || it.text != latest.text }
+    var filter by rememberSaveable { mutableStateOf("All") }
+    val filteredHistory = history.filter { entry ->
+        filter == "All" || entry.from.equals(filter, ignoreCase = true)
+    }.let { list ->
+        if (latest == null) list
+        else list.filter { it.id != latest.id || it.text != latest.text }
+    }
+    val showLatest = latest != null && (filter == "All" || latest.from.equals(filter, ignoreCase = true))
     Column(modifier = Modifier.fillMaxSize()) {
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            clipFilters.forEach { name ->
+                FilterChip(
+                    selected = filter == name,
+                    onClick = { filter = name },
+                    label = { Text(name) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcCyan,
+                    ),
+                )
+            }
+        }
         LazyColumn(
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
                 SectionLabel("Latest")
                 Spacer(Modifier.height(8.dp))
-                if (latest == null) {
+                if (!showLatest) {
                     EmptyHint("Nothing on the house clipboard.")
                 } else {
-                    ClipCard(entry = latest, featured = true, onCopy = onCopy)
+                    ClipCard(
+                        entry = latest!!,
+                        featured = true,
+                        onCopy = onCopy,
+                        onShare = onShare,
+                        onOpenUrl = onOpenUrl,
+                    )
                 }
             }
-            if (older.isNotEmpty()) {
+            if (filteredHistory.isNotEmpty()) {
                 item { SectionLabel("History") }
-                items(older, key = { it.id + it.ts }) { entry ->
-                    ClipCard(entry = entry, featured = false, onCopy = onCopy)
+                items(filteredHistory, key = { it.id + it.ts }) { entry ->
+                    ClipCard(
+                        entry = entry,
+                        featured = false,
+                        onCopy = onCopy,
+                        onShare = onShare,
+                        onOpenUrl = onOpenUrl,
+                    )
                 }
             }
         }
@@ -434,6 +561,8 @@ private fun ListPane(
     todos: List<TodoItem>,
     onAdd: (String) -> Unit,
     onToggle: (TodoItem) -> Unit,
+    onDelete: (TodoItem) -> Unit,
+    onShareList: () -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     val open = todos.filter { !it.done }
@@ -453,6 +582,16 @@ private fun ListPane(
                 }
             },
         )
+        if (todos.isNotEmpty()) {
+            OutlinedButton(
+                onClick = onShareList,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            ) {
+                Icon(Icons.Outlined.Share, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Copy / share list")
+            }
+        }
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(16.dp),
@@ -470,7 +609,11 @@ private fun ListPane(
                     SectionLabel("Done")
                 }
                 items(done, key = { it.id }) { item ->
-                    TodoRow(item = item, onToggle = onToggle)
+                    TodoRow(
+                        item = item,
+                        onToggle = onToggle,
+                        onDelete = onDelete,
+                    )
                 }
             }
         }
@@ -482,17 +625,19 @@ private fun SendPane(
     drops: List<DropItem>,
     onSendClip: (String) -> Unit,
     onSendList: (String) -> Unit,
-    onUpload: (Uri, String) -> Unit,
+    onUpload: (Uri, String, String) -> Unit,
+    onOpenDrop: (DropItem) -> Unit,
 ) {
     val context = LocalContext.current
     var draft by rememberSaveable { mutableStateOf("") }
+    var session by rememberSaveable { mutableStateOf("") }
     var captureUri by remember { mutableStateOf<Uri?>(null) }
     val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val uri = captureUri
-        if (ok && uri != null) onUpload(uri, "photo.jpg")
+        if (ok && uri != null) onUpload(uri, "photo.jpg", session)
     }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) onUpload(uri, uri.lastPathSegment ?: "photo.jpg")
+        if (uri != null) onUpload(uri, uri.lastPathSegment ?: "photo.jpg", session)
     }
 
     Column(
@@ -533,6 +678,14 @@ private fun SendPane(
             ) { Text("To list") }
         }
         SectionLabel("Photo to Incoming")
+        OutlinedTextField(
+            value = session,
+            onValueChange = { session = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Session folder (optional)") },
+            placeholder = { Text("Drop/Sessions/2026-09-02 – Event") },
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
@@ -571,7 +724,9 @@ private fun SendPane(
                 Card(
                     colors = CardDefaults.cardColors(containerColor = EdcSurface),
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenDrop(drop) },
                 ) {
                     Column(modifier = Modifier.padding(12.dp)) {
                         Text(drop.name, fontWeight = FontWeight.Medium)
@@ -595,6 +750,7 @@ private fun SettingsPane(
     onPreset: (HostPreset) -> Unit,
     onCustomUrl: (String) -> Unit,
     onProbe: () -> Unit,
+    onFindHost: () -> Unit,
 ) {
     var customDraft by remember(settings.customUrl) { mutableStateOf(settings.customUrl) }
     Column(
@@ -651,9 +807,12 @@ private fun SettingsPane(
             style = MaterialTheme.typography.bodySmall,
             color = EdcMuted,
         )
-        Button(onClick = onProbe) { Text("Test connection") }
+        Button(onClick = onProbe, modifier = Modifier.fillMaxWidth()) { Text("Test connection") }
+        OutlinedButton(onClick = onFindHost, modifier = Modifier.fillMaxWidth()) {
+            Text("Find host (Home, then Away)")
+        }
         Text(
-            text = "Home Wi-Fi uses the house LAN. Away needs Tailscale on this phone. Identity stays on this device.",
+            text = "Home Wi-Fi uses the house LAN. Away needs Tailscale on this phone. Find host tries both and keeps whichever answers.",
             style = MaterialTheme.typography.bodySmall,
             color = EdcMuted,
         )
@@ -665,7 +824,13 @@ private fun ClipCard(
     entry: ClipEntry,
     featured: Boolean,
     onCopy: (String) -> Unit,
+    onShare: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
 ) {
+    var expanded by rememberSaveable(entry.id + entry.ts) { mutableStateOf(false) }
+    val long = entry.text.length > clipPreviewChars
+    val shown = if (expanded || !long) entry.text else entry.text.take(clipPreviewChars) + "…"
+    val directUrl = firstUrl(entry.text)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (featured) EdcSurfaceHi else EdcSurface,
@@ -674,22 +839,35 @@ private fun ClipCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                text = entry.text,
-                style = if (featured) MaterialTheme.typography.titleMedium else MaterialTheme.typography.bodyMedium,
+            LinkifiedText(
+                text = shown,
+                color = EdcInk,
+                onOpenUrl = onOpenUrl,
+                modifier = Modifier.fillMaxWidth(),
             )
+            if (long) {
+                TextButton(onClick = { expanded = !expanded }) {
+                    Text(if (expanded) "Show less" else "Show more")
+                }
+            }
+            if (directUrl != null && !entry.text.trim().equals(directUrl, ignoreCase = true)) {
+                TextButton(onClick = { onOpenUrl(directUrl) }) { Text("Open link") }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = metaLine(entry.from, entry.ts),
+                    text = metaLine(entry.from.ifBlank { "EDC" }, entry.ts),
                     style = MaterialTheme.typography.labelSmall,
                     color = EdcMuted,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                IconButton(onClick = { onShare(entry.text) }) {
+                    Icon(Icons.Outlined.Share, contentDescription = "Share")
+                }
                 IconButton(onClick = { onCopy(entry.text) }) {
                     Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy")
                 }
@@ -702,6 +880,7 @@ private fun ClipCard(
 private fun TodoRow(
     item: TodoItem,
     onToggle: (TodoItem) -> Unit,
+    onDelete: ((TodoItem) -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -721,6 +900,9 @@ private fun TodoRow(
             if (meta.isNotBlank()) {
                 Text(meta, style = MaterialTheme.typography.labelSmall, color = EdcMuted)
             }
+        }
+        if (item.done && onDelete != null) {
+            TextButton(onClick = { onDelete(item) }) { Text("Remove") }
         }
     }
 }

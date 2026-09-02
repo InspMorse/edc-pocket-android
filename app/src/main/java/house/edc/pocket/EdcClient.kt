@@ -37,10 +37,29 @@ class EdcClient(
         }
     }
 
-    fun probe(base: String, identity: String): String {
-        val (code, _) = get(base, "/api/clipboard", identity)
-        if (code in 200..299) return "Host reached."
-        error("Host answered $code")
+    fun probeHealth(base: String, identity: String): HostHealth {
+        val (code, body) = get(base, "/api/health", identity)
+        if (code !in 200..299) error("Host answered $code")
+        return parseHealth(body)
+    }
+
+    fun probe(base: String, identity: String): String = probeHealth(base, identity).summary()
+
+    fun findReachableHost(settings: EdcSettings, identity: String): ReachableHost? {
+        val candidates = linkedMapOf<String, HostPreset?>()
+        if (settings.preset == HostPreset.CUSTOM) {
+            if (settings.baseUrl.isNotBlank()) candidates[settings.baseUrl] = HostPreset.CUSTOM
+        } else {
+            candidates[HostPreset.LAN.url] = HostPreset.LAN
+            candidates[HostPreset.TAILSCALE.url] = HostPreset.TAILSCALE
+            val current = settings.baseUrl
+            if (current.isNotBlank()) candidates[current] = settings.preset
+        }
+        for ((base, preset) in candidates) {
+            val health = runCatching { probeHealth(base, identity) }.getOrNull() ?: continue
+            if (health.ok) return ReachableHost(preset, base, health)
+        }
+        return null
     }
 
     fun load(base: String, identity: String): HostSnapshot {
@@ -55,8 +74,22 @@ class EdcClient(
             latest = clips.firstOrNull(),
             history = clips,
             todos = if (todoOk) parseTodos(todo!!.second) else emptyList(),
-            drops = if (drop != null && drop.first in 200..299) parseDrops(drop.second) else emptyList(),
+            drops = if (drop != null && drop.first in 200..299) {
+                parseDrops(drop.second, base)
+            } else {
+                emptyList()
+            },
         )
+    }
+
+    fun todoPlainText(base: String, identity: String): String {
+        val (code, body) = get(base, "/api/todo/text", identity)
+        if (code in 200..299 && body.isNotBlank()) return body.trim()
+        val snapshot = load(base, identity)
+        return snapshot.todos.joinToString("\n") { item ->
+            val mark = if (item.done) "☑" else "☐"
+            "$mark ${item.text}"
+        }
     }
 
     fun sendText(base: String, identity: String, text: String) {
@@ -92,20 +125,53 @@ class EdcClient(
         }
     }
 
-    fun uploadImage(base: String, identity: String, uri: Uri, filename: String) {
+    fun deleteTodo(base: String, identity: String, id: String) {
+        val body = """{"from":${identity.json()}}""".toRequestBody(jsonType)
+        val req = Request.Builder()
+            .url(url(base, "/api/todo/${id.encode()}", identity))
+            .addHeader("from", identity)
+            .delete(body)
+            .build()
+        http.newCall(req).execute().use { res ->
+            if (res.isSuccessful) return
+            if (res.code == 404 || res.code == 405) {
+                val fallback =
+                    """{"id":${id.json()},"from":${identity.json()},"action":"delete"}"""
+                        .toRequestBody(jsonType)
+                post(base, "/api/todo", identity, fallback)
+                return
+            }
+            error("Delete failed (${res.code})")
+        }
+    }
+
+    fun uploadImage(
+        base: String,
+        identity: String,
+        uri: Uri,
+        filename: String,
+        session: String = "",
+    ) {
         val bytes = resolver.openInputStream(uri)?.use { it.readBytes() }
             ?: error("Could not read image")
-        val name = filename.ifBlank { "photo.jpg" }
+        val sessionClean = session.trim().trim('/', '\\')
+        val baseName = filename.ifBlank { "photo.jpg" }
+        val name = if (sessionClean.isEmpty()) {
+            baseName
+        } else {
+            "$sessionClean/${baseName.substringAfterLast('/')}"
+        }
         val mime = resolver.getType(uri) ?: "image/jpeg"
         val paths = listOf("/api/drop", "/api/incoming", "/api/upload", "/drop", "/incoming")
         var last = "Upload failed"
         for (path in paths) {
-            val part = MultipartBody.Builder()
+            val builder = MultipartBody.Builder()
                 .setType(MultipartBody.FORM)
                 .addFormDataPart("from", identity)
                 .addFormDataPart("filename", name)
-                .addFormDataPart("file", name, bytes.toRequestBody(mime.toMediaType()))
-                .build()
+                .addFormDataPart("file", name.substringAfterLast('/'), bytes.toRequestBody(mime.toMediaType()))
+            if (sessionClean.isNotEmpty()) builder.addFormDataPart("session", sessionClean)
+            val part = builder.build()
             val req = Request.Builder()
                 .url(url(base, path, identity))
                 .addHeader("from", identity)
@@ -119,6 +185,19 @@ class EdcClient(
             if (code != 404 && code != 405) break
         }
         error(last)
+    }
+
+    fun incomingOpenUrl(base: String, drop: DropItem): String? {
+        if (drop.path.startsWith("http")) return drop.path
+        val root = base.trimEnd('/')
+        val rel = drop.path.trim().trimStart('/')
+        if (rel.isNotEmpty()) {
+            return "$root/$rel"
+        }
+        if (drop.id.isNotBlank()) {
+            return "$root/api/incoming/${drop.id.encode()}"
+        }
+        return null
     }
 
     private fun post(base: String, path: String, identity: String, body: okhttp3.RequestBody) {

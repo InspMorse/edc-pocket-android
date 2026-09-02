@@ -58,11 +58,11 @@ internal fun parseTodos(raw: String): List<TodoItem> {
     return items
 }
 
-internal fun parseDrops(raw: String): List<DropItem> {
+internal fun parseDrops(raw: String, baseUrl: String = ""): List<DropItem> {
     val root = parseJson(raw) ?: return emptyList()
     val items = ArrayList<DropItem>()
     fun take(obj: JSONObject) {
-        obj.toDrop()?.let { items += it }
+        obj.toDrop(baseUrl)?.let { items += it }
     }
     when (root) {
         is JSONArray -> root.objects().forEach(::take)
@@ -79,6 +79,26 @@ internal fun parseDrops(raw: String): List<DropItem> {
         }
     }
     return items
+}
+
+internal fun parseHealth(raw: String): HostHealth {
+    val root = parseJson(raw) as? JSONObject ?: return HostHealth(ok = raw.contains("\"ok\""))
+    val ok = when (val value = root.opt("ok")) {
+        is Boolean -> value
+        is String -> value.equals("true", ignoreCase = true)
+        else -> root.optInt("StatusCode", 200) in 200..299
+    }
+    var health = HostHealth(
+        ok = ok,
+        version = root.str("version", "app_version"),
+        hostName = root.str("host_name", "hostname", "host"),
+        dashboardUrl = root.str("dashboard_url", "url"),
+    )
+    val active = root.optJSONObject("active_host")
+    if (active != null && health.hostName.isBlank()) {
+        health = health.copy(hostName = active.str("name", "hostname"))
+    }
+    return health
 }
 
 private fun parseJson(raw: String): Any? {
@@ -115,8 +135,8 @@ private fun JSONObject.toClip(): ClipEntry? {
     return ClipEntry(
         id = str("id", "_id", "uuid", fallback = UUID.randomUUID().toString()),
         text = text,
-        from = str("from", "by", "user", "as", "identity", "who"),
-        ts = str("ts", "time", "timestamp", "at", "created", "created_at", "date"),
+        from = str("from", "by", "user", "as", "identity", "who", "updated_by"),
+        ts = str("ts", "time", "timestamp", "at", "created", "created_at", "updated_at", "date"),
     )
 }
 
@@ -132,15 +152,22 @@ private fun JSONObject.toTodo(): TodoItem? {
     )
 }
 
-private fun JSONObject.toDrop(): DropItem? {
+private fun JSONObject.toDrop(baseUrl: String): DropItem? {
     val name = str("name", "filename", "file", "title", "path")
     if (name.isEmpty()) return null
+    val path = str("path", "url", "download_url", "href", "file", "filename", fallback = name)
+    val openPath = when {
+        path.startsWith("http") -> path
+        path.isNotBlank() && baseUrl.isNotBlank() -> path.trimStart('/')
+        else -> path
+    }
     return DropItem(
         id = str("id", "_id", "uuid", fallback = name),
         name = name.substringAfterLast('/'),
         from = str("from", "by", "user", "as", "identity", "who"),
         ts = str("ts", "time", "timestamp", "at", "created", "created_at", "date"),
         size = num("size", "bytes", "length"),
+        path = openPath,
     )
 }
 

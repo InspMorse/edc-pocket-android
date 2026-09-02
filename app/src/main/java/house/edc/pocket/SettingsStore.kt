@@ -52,4 +52,8 @@ class SettingsStore(private val context: Context) {
     suspend fun setCustomUrl(value: String) {
         context.dataStore.edit { it[customKey] = value }
     }
+
+    suspend fun rememberWorkingPreset(preset: HostPreset) {
+        context.dataStore.edit { it[presetKey] = preset.name }
+    }
 }

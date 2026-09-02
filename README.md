@@ -14,11 +14,12 @@ From the command line: `./gradlew assembleDebug`. The APK lands in the same `app
 
 ## What it does
 
-- **Clip** — latest house clipboard, copy, send (manual only)
-- **List** — shopping / to-do, tap to tick, add item
-- **Send** — text/link to clipboard or list; camera or library photo to Incoming
-- **Settings** — Home Wi-Fi / Away / Custom, identity sticky on this phone
-- **Share** — from any app, **Send to EDC** (text, links, photos)
+- **Clip** — latest house clipboard, filter by person, tap links, expand long text, copy/share, send (manual only)
+- **List** — shopping / to-do, tap to tick, remove done items, copy/share the whole list
+- **Send** — text/link to clipboard or list; camera or library photo to Incoming (optional session folder); tap Incoming files to open
+- **Settings** — Home Wi-Fi / Away / Custom, test connection via `/api/health`, find host (tries Home then Away)
+- **Share** — from any app, **Send to EDC** (choose clipboard or list; photos go to Incoming)
+- **Background** — refreshes every 5s while open; keeps last known data if the host drops offline
 
 Client only. Never hosts.
 
