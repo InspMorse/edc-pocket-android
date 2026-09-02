@@ -23,11 +23,15 @@ data class EdcSettings(
     val clipFilter: String = "All",
     val autoHost: Boolean = true,
     val backgroundPoll: BackgroundPollMode = BackgroundPollMode.OFF,
+    val useHttps: Boolean = false,
 ) {
     val baseUrl: String
-        get() = when (preset) {
-            HostPreset.CUSTOM -> customUrl.trim().trimEnd('/')
-            else -> preset.url
+        get() {
+            val raw = when (preset) {
+                HostPreset.CUSTOM -> customUrl.trim().trimEnd('/')
+                else -> preset.url
+            }
+            return if (useHttps) raw.replaceFirst("http://", "https://") else raw
         }
 }
 
@@ -37,8 +41,8 @@ class SettingsStore(private val context: Context) {
     private val customKey = stringPreferencesKey("custom_url")
     private val clipFilterKey = stringPreferencesKey("clip_filter")
     private val autoHostKey = booleanPreferencesKey("auto_host")
-
-    val backgroundPollKey = stringPreferencesKey("background_poll")
+    private val backgroundPollKey = stringPreferencesKey("background_poll")
+    private val useHttpsKey = booleanPreferencesKey("use_https")
 
     val settings: Flow<EdcSettings> = context.dataStore.data.map { prefs ->
         EdcSettings(
@@ -51,6 +55,7 @@ class SettingsStore(private val context: Context) {
             backgroundPoll = runCatching {
                 BackgroundPollMode.valueOf(prefs[backgroundPollKey] ?: "OFF")
             }.getOrDefault(BackgroundPollMode.OFF),
+            useHttps = prefs[useHttpsKey] ?: false,
         )
     }
 
@@ -80,5 +85,9 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setBackgroundPoll(value: BackgroundPollMode) {
         context.dataStore.edit { it[backgroundPollKey] = value.name }
+    }
+
+    suspend fun setUseHttps(value: Boolean) {
+        context.dataStore.edit { it[useHttpsKey] = value }
     }
 }

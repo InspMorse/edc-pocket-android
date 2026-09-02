@@ -25,8 +25,10 @@ From the command line: `./gradlew assembleDebug`. The APK lands in the same `app
 - **v0.2** — adaptive icon, app shortcuts, pull-to-refresh, tap-to-copy, haptics, host info in Settings
 - **v0.3** — auto Home/Away, offline outbox, network re-probe, smarter polling, URL validation
 - **v0.4** — home screen widget, Quick Settings tile, background clip alerts
+- **v0.5** — Incoming thumbnails, multi-photo, share session, clip search, undo delete
+- **v0.6** — host capability discovery, graceful UI degradation, identity sync, dashboard deep links, optional HTTPS
 
-See **[ROADMAP.md](ROADMAP.md)** for Phases 4–6 (next: richer send/receive).
+See **[ROADMAP.md](ROADMAP.md)** for Phase 6 (quality & release).
 
 Client only. Never hosts.
 

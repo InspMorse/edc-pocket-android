@@ -82,23 +82,36 @@ internal fun parseDrops(raw: String, baseUrl: String = ""): List<DropItem> {
 }
 
 internal fun parseHealth(raw: String): HostHealth {
-    val root = parseJson(raw) as? JSONObject ?: return HostHealth(ok = raw.contains("\"ok\""))
+    val root = parseJson(raw) as? org.json.JSONObject ?: return HostHealth(ok = raw.contains("\"ok\""))
     val ok = when (val value = root.opt("ok")) {
         is Boolean -> value
         is String -> value.equals("true", ignoreCase = true)
         else -> root.optInt("StatusCode", 200) in 200..299
     }
+    val links = parseLinkTemplates(root)
     var health = HostHealth(
         ok = ok,
         version = root.str("version", "app_version"),
         hostName = root.str("host_name", "hostname", "host"),
-        dashboardUrl = root.str("dashboard_url", "url"),
+        dashboardUrl = root.str("dashboard_url", "url").ifBlank { links.dashboardBase },
+        capabilities = parseCapabilities(root),
+        knownUsers = parseKnownUsers(root),
+        linkTemplates = links.copy(
+            dashboardBase = links.dashboardBase.ifBlank {
+                root.str("dashboard_url", "url")
+            },
+        ),
     )
     val active = root.optJSONObject("active_host")
     if (active != null && health.hostName.isBlank()) {
         health = health.copy(hostName = active.str("name", "hostname"))
     }
     return health
+}
+
+internal fun parseCapabilitiesJson(raw: String): HostCapabilities {
+    val root = parseJson(raw) as? org.json.JSONObject ?: return HostCapabilities.ALL
+    return parseCapabilities(root)
 }
 
 private fun parseJson(raw: String): Any? {

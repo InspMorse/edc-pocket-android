@@ -40,8 +40,46 @@ class EdcClient(
     fun probeHealth(base: String, identity: String): HostHealth {
         val (code, body) = get(base, "/api/health", identity)
         if (code !in 200..299) error("Host answered $code")
-        return parseHealth(body)
+        return enrichFromCapabilitiesEndpoint(base, identity, parseHealth(body))
     }
+
+    private fun enrichFromCapabilitiesEndpoint(
+        base: String,
+        identity: String,
+        health: HostHealth,
+    ): HostHealth {
+        val capsResponse = runCatching { get(base, "/api/capabilities", identity) }.getOrNull()
+            ?: return health
+        if (capsResponse.first !in 200..299) return health
+        val root = runCatching {
+            org.json.JSONObject(capsResponse.second.trim())
+        }.getOrNull() ?: return health
+        val fromApi = parseCapabilities(root)
+        val links = parseLinkTemplates(root)
+        return health.copy(
+            capabilities = mergeCapabilities(health.capabilities, fromApi),
+            knownUsers = health.knownUsers.ifEmpty { parseKnownUsers(root) },
+            linkTemplates = health.linkTemplates.copy(
+                dashboardBase = health.linkTemplates.dashboardBase.ifBlank { links.dashboardBase },
+                clipboardItem = health.linkTemplates.clipboardItem.ifBlank { links.clipboardItem },
+                todoItem = health.linkTemplates.todoItem.ifBlank { links.todoItem },
+            ),
+        )
+    }
+
+    private fun mergeCapabilities(
+        healthCaps: HostCapabilities,
+        apiCaps: HostCapabilities,
+    ): HostCapabilities = HostCapabilities(
+        clipboard = healthCaps.clipboard && apiCaps.clipboard,
+        todo = healthCaps.todo && apiCaps.todo,
+        todoDelete = healthCaps.todoDelete && apiCaps.todoDelete,
+        todoText = healthCaps.todoText && apiCaps.todoText,
+        incoming = healthCaps.incoming && apiCaps.incoming,
+        upload = healthCaps.upload && apiCaps.upload,
+        sessionUpload = healthCaps.sessionUpload && apiCaps.sessionUpload,
+        dashboard = healthCaps.dashboard && apiCaps.dashboard,
+    )
 
     fun probe(base: String, identity: String): String = probeHealth(base, identity).summary()
 

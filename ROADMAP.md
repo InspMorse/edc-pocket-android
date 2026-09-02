@@ -106,22 +106,22 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 
 ---
 
-## Phase 5 — Deeper house integration (next)
+## Phase 5 — Deeper house integration (done)
 
 **Goal:** Pocket stays in sync as Everyday Clipboard evolves.
 
-| # | Item |
-|---|------|
-| 5.1 | Capability discovery from health / future API |
-| 5.2 | Graceful degradation when endpoints missing |
-| 5.3 | Identity sync if host exposes users |
-| 5.4 | Deep link to host dashboard item |
-| 5.5 | Optional HTTPS to host |
-| 5.6 | Host push via FCM (needs host work) |
+| # | Item | Status |
+|---|------|--------|
+| 5.1 | Capability discovery from health / future API | Done |
+| 5.2 | Graceful degradation when endpoints missing | Done |
+| 5.3 | Identity sync if host exposes users | Done |
+| 5.4 | Deep link to host dashboard item | Done |
+| 5.5 | Optional HTTPS to host | Done |
+| 5.6 | Host push via FCM (needs host work) | Skipped |
 
 ---
 
-## Phase 6 — Quality, trust & release
+## Phase 6 — Quality, trust & release (next)
 
 **Goal:** Safe to install long-term; easy to ship updates.
 
@@ -146,7 +146,8 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 | **0.2** | Phase 1 |
 | **0.3** | Phase 2 |
 | **0.4** | Phase 3 |
-| **0.5** | Phase 4 (current) |
+| **0.5** | Phase 4 |
+| **0.6** | Phase 5 (current) |
 | **1.0** | Phase 6 release |
 
 ---
@@ -155,7 +156,8 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 
 | Endpoint | Used for |
 |----------|----------|
-| `GET /api/health` | Probe, find host, dashboard URL |
+| `GET /api/health` | Probe, find host, dashboard URL, capabilities |
+| `GET /api/capabilities` | Optional richer caps, users, dashboard link templates |
 | `GET /api/clipboard` | Clip tab, widget (future) |
 | `POST /api/clipboard` | Send, share target, outbox |
 | `GET /api/todo` | List tab |

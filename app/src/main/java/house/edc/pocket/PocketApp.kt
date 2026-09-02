@@ -175,16 +175,21 @@ fun PocketApp(
             }
             if (!silent) loading = true
             val result = withContext(Dispatchers.IO) {
-                runCatching { client.load(base, settings.identity) }
+                runCatching {
+                    val snap = client.load(base, settings.identity)
+                    val health = runCatching { client.probeHealth(base, settings.identity) }.getOrNull()
+                    snap to health
+                }
             }
             if (!silent) loading = false
             result.fold(
-                onSuccess = {
-                    snapshot = it
+                onSuccess = { (snap, health) ->
+                    snapshot = snap
+                    if (health != null) hostHealth = health
                     error = null
                     stale = false
                     status = connectionLabel(settings, stale = false, error = null)
-                    val entry = it.latest ?: it.history.firstOrNull()
+                    val entry = snap.latest ?: snap.history.firstOrNull()
                     if (entry != null) {
                         LatestClipStore(context).save(entry)
                         scope.launch { EdcWidgetUpdater.updateAll(context) }
@@ -477,11 +482,13 @@ fun PocketApp(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
                     )
                 }
+                val caps = hostHealth?.capabilities ?: HostCapabilities.ALL
                 when (currentTab) {
                     PocketTab.CLIP -> ClipPane(
                         latest = snapshot.latest,
                         history = snapshot.history,
                         filter = settings.clipFilter,
+                        clipboardEnabled = caps.clipboard,
                         onFilterChange = { scope.launch { store.setClipFilter(it) } },
                         isRefreshing = pullRefreshing,
                         onRefresh = { scope.launch { pullRefresh() } },
@@ -499,6 +506,11 @@ fun PocketApp(
                             context.startActivity(Intent.createChooser(send, "Share clip"))
                         },
                         onOpenUrl = { openUrl(context, it) },
+                        onOpenDashboard = { entry ->
+                            HostLinks.clipDashboardUrl(hostHealth, entry)?.let { openUrl(context, it) }
+                                ?: scope.launch { snackbar.showSnackbar("No dashboard link for this clip") }
+                        },
+                        showDashboardLinks = caps.dashboard,
                         onSend = { text ->
                             scope.launch {
                                 sendWithOutbox(
@@ -515,6 +527,10 @@ fun PocketApp(
                     )
                     PocketTab.LIST -> ListPane(
                         todos = snapshot.todos,
+                        listEnabled = caps.todo,
+                        shareListEnabled = caps.todoText,
+                        deleteEnabled = caps.todoDelete,
+                        showDashboardLinks = caps.dashboard,
                         isRefreshing = pullRefreshing,
                         onRefresh = { scope.launch { pullRefresh() } },
                         onAdd = { text ->
@@ -591,11 +607,20 @@ fun PocketApp(
                                 context.startActivity(Intent.createChooser(send, "Share list"))
                             }
                         },
+                        onOpenDashboard = { item ->
+                            HostLinks.todoDashboardUrl(hostHealth, item)?.let { openUrl(context, it) }
+                                ?: scope.launch { snackbar.showSnackbar("No dashboard link for this item") }
+                        },
                     )
                     PocketTab.SEND -> SendPane(
                         drops = snapshot.drops,
                         baseUrl = settings.baseUrl,
                         uploadProgress = uploadProgress,
+                        clipEnabled = caps.clipboard,
+                        listEnabled = caps.todo,
+                        uploadEnabled = caps.upload,
+                        sessionUploadEnabled = caps.sessionUpload,
+                        incomingEnabled = caps.incoming,
                         incomingUrl = { drop -> client.incomingOpenUrl(settings.baseUrl, drop) },
                         onSendClip = { text ->
                             scope.launch {
@@ -755,6 +780,8 @@ fun PocketApp(
                                 snackbar.showSnackbar("No dashboard URL from host")
                             }
                         },
+                        useHttps = settings.useHttps,
+                        onUseHttps = { scope.launch { store.setUseHttps(it) } },
                     )
                 }
             }
@@ -782,12 +809,15 @@ private fun ClipPane(
     latest: ClipEntry?,
     history: List<ClipEntry>,
     filter: String,
+    clipboardEnabled: Boolean,
     onFilterChange: (String) -> Unit,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onCopy: (String) -> Unit,
     onShare: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenDashboard: (ClipEntry) -> Unit,
+    showDashboardLinks: Boolean,
     onSend: (String) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
@@ -855,6 +885,7 @@ private fun ClipPane(
                         onCopy = onCopy,
                         onShare = onShare,
                         onOpenUrl = onOpenUrl,
+                        onOpenDashboard = if (showDashboardLinks) onOpenDashboard else null,
                     )
                 }
             }
@@ -867,25 +898,33 @@ private fun ClipPane(
                         onCopy = onCopy,
                         onShare = onShare,
                         onOpenUrl = onOpenUrl,
+                        onOpenDashboard = if (showDashboardLinks) onOpenDashboard else null,
                     )
                 }
             }
         }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
-        SendField(
-            value = draft,
-            onValueChange = { draft = it },
-            placeholder = "Type to send — manual only",
-            actionLabel = "Send",
-            onAction = {
-                val text = draft.trim()
-                if (text.isNotEmpty()) {
-                    onSend(text)
-                    draft = ""
-                }
-            },
-        )
+        if (clipboardEnabled) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            SendField(
+                value = draft,
+                onValueChange = { draft = it },
+                placeholder = "Type to send — manual only",
+                actionLabel = "Send",
+                onAction = {
+                    val text = draft.trim()
+                    if (text.isNotEmpty()) {
+                        onSend(text)
+                        draft = ""
+                    }
+                },
+            )
+        } else {
+            EmptyHint(
+                "House clipboard is read-only on this host.",
+                modifier = Modifier.padding(16.dp),
+            )
+        }
     }
 }
 
@@ -893,32 +932,44 @@ private fun ClipPane(
 @Composable
 private fun ListPane(
     todos: List<TodoItem>,
+    listEnabled: Boolean,
+    shareListEnabled: Boolean,
+    deleteEnabled: Boolean,
+    showDashboardLinks: Boolean,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onAdd: (String) -> Unit,
     onToggle: (TodoItem) -> Unit,
     onDelete: (TodoItem) -> Unit,
     onShareList: () -> Unit,
+    onOpenDashboard: (TodoItem) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     val open = todos.filter { !it.done }
     val done = todos.filter { it.done }
     Column(modifier = Modifier.fillMaxSize()) {
-        SendField(
-            value = draft,
-            onValueChange = { draft = it },
-            placeholder = "Add to shopping / to-do",
-            actionLabel = "Add",
-            icon = Icons.Outlined.Add,
-            onAction = {
-                val text = draft.trim()
-                if (text.isNotEmpty()) {
-                    onAdd(text)
-                    draft = ""
-                }
-            },
-        )
-        if (todos.isNotEmpty()) {
+        if (listEnabled) {
+            SendField(
+                value = draft,
+                onValueChange = { draft = it },
+                placeholder = "Add to shopping / to-do",
+                actionLabel = "Add",
+                icon = Icons.Outlined.Add,
+                onAction = {
+                    val text = draft.trim()
+                    if (text.isNotEmpty()) {
+                        onAdd(text)
+                        draft = ""
+                    }
+                },
+            )
+        } else {
+            EmptyHint(
+                "Shared list is unavailable on this host.",
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+        if (todos.isNotEmpty() && shareListEnabled) {
             OutlinedButton(
                 onClick = onShareList,
                 modifier = Modifier.padding(horizontal = 16.dp),
@@ -942,7 +993,15 @@ private fun ListPane(
                 item { EmptyHint("List is empty.") }
             }
             items(open, key = { it.id }) { item ->
-                TodoRow(item = item, onToggle = onToggle)
+                TodoRow(
+                    item = item,
+                    onToggle = onToggle,
+                    onOpenDashboard = if (showDashboardLinks) {
+                        { onOpenDashboard(item) }
+                    } else {
+                        null
+                    },
+                )
             }
             if (done.isNotEmpty()) {
                 item {
@@ -953,7 +1012,12 @@ private fun ListPane(
                     TodoRow(
                         item = item,
                         onToggle = onToggle,
-                        onDelete = onDelete,
+                        onDelete = if (deleteEnabled) onDelete else null,
+                        onOpenDashboard = if (showDashboardLinks) {
+                            { onOpenDashboard(item) }
+                        } else {
+                            null
+                        },
                     )
                 }
             }
@@ -967,6 +1031,11 @@ private fun SendPane(
     drops: List<DropItem>,
     baseUrl: String,
     uploadProgress: UploadProgress?,
+    clipEnabled: Boolean,
+    listEnabled: Boolean,
+    uploadEnabled: Boolean,
+    sessionUploadEnabled: Boolean,
+    incomingEnabled: Boolean,
     incomingUrl: (DropItem) -> String?,
     onSendClip: (String) -> Unit,
     onSendList: (String) -> Unit,
@@ -1009,36 +1078,43 @@ private fun SendPane(
             minLines = 3,
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(
-                onClick = {
-                    val text = draft.trim()
-                    if (text.isNotEmpty()) {
-                        onSendClip(text)
-                        draft = ""
-                    }
-                },
-                enabled = draft.isNotBlank(),
-            ) { Text("To clip") }
-            OutlinedButton(
-                onClick = {
-                    val text = draft.trim()
-                    if (text.isNotEmpty()) {
-                        onSendList(text)
-                        draft = ""
-                    }
-                },
-                enabled = draft.isNotBlank(),
-            ) { Text("To list") }
+            if (clipEnabled) {
+                Button(
+                    onClick = {
+                        val text = draft.trim()
+                        if (text.isNotEmpty()) {
+                            onSendClip(text)
+                            draft = ""
+                        }
+                    },
+                    enabled = draft.isNotBlank(),
+                ) { Text("To clip") }
+            }
+            if (listEnabled) {
+                OutlinedButton(
+                    onClick = {
+                        val text = draft.trim()
+                        if (text.isNotEmpty()) {
+                            onSendList(text)
+                            draft = ""
+                        }
+                    },
+                    enabled = draft.isNotBlank(),
+                ) { Text("To list") }
+            }
         }
-        SectionLabel("Photo to Incoming")
-        OutlinedTextField(
-            value = session,
-            onValueChange = { session = it },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            label = { Text("Session folder (optional)") },
-            placeholder = { Text("Drop/Sessions/2026-09-02 – Event") },
-        )
+        if (uploadEnabled) {
+            SectionLabel("Photo to Incoming")
+            if (sessionUploadEnabled) {
+                OutlinedTextField(
+                    value = session,
+                    onValueChange = { session = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Session folder (optional)") },
+                    placeholder = { Text("Drop/Sessions/2026-09-02 – Event") },
+                )
+            }
         uploadProgress?.let { progress ->
             Column(modifier = Modifier.fillMaxWidth()) {
                 LinearProgressIndicator(
@@ -1095,18 +1171,21 @@ private fun SendPane(
                 Text("Many")
             }
         }
-        SectionLabel("Incoming")
-        if (drops.isEmpty()) {
-            EmptyHint("No incoming files yet.")
-        } else {
-            drops.forEach { drop ->
-                DropCard(
-                    drop = drop,
-                    imageUrl = incomingUrl(drop)?.takeIf { drop.isImage() },
-                    onOpen = { onOpenDrop(drop) },
-                    onShare = { onShareDrop(drop) },
-                    onSave = { onSaveDrop(drop) },
-                )
+        }
+        if (incomingEnabled) {
+            SectionLabel("Incoming")
+            if (drops.isEmpty()) {
+                EmptyHint("No incoming files yet.")
+            } else {
+                drops.forEach { drop ->
+                    DropCard(
+                        drop = drop,
+                        imageUrl = incomingUrl(drop)?.takeIf { drop.isImage() },
+                        onOpen = { onOpenDrop(drop) },
+                        onShare = { onShareDrop(drop) },
+                        onSave = { onSaveDrop(drop) },
+                    )
+                }
             }
         }
     }
@@ -1181,6 +1260,8 @@ private fun SettingsPane(
     onFlushOutbox: () -> Unit,
     onClearOutbox: () -> Unit,
     onOpenDashboard: () -> Unit,
+    useHttps: Boolean,
+    onUseHttps: (Boolean) -> Unit,
 ) {
     var customDraft by remember(settings.customUrl) { mutableStateOf(settings.customUrl) }
     Column(
@@ -1192,7 +1273,7 @@ private fun SettingsPane(
     ) {
         SectionLabel("Who is this phone")
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            identities.forEach { name ->
+            effectiveIdentities(hostHealth).forEach { name ->
                 FilterChip(
                     selected = settings.identity == name,
                     onClick = { onIdentity(name) },
@@ -1248,6 +1329,21 @@ private fun SettingsPane(
             }
             Switch(checked = autoHost, onCheckedChange = onAutoHost)
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Use HTTPS", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Talk to host over https:// instead of http://",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(checked = useHttps, onCheckedChange = onUseHttps)
+        }
         SectionLabel("Glanceable")
         Text(
             text = "Add the home screen widget, Quick Settings tile “EDC clip”, and optional background alerts.",
@@ -1292,6 +1388,20 @@ private fun SettingsPane(
                 text = hostHealth.summary(),
                 style = MaterialTheme.typography.bodyMedium,
             )
+            hostHealth.capabilities.summaryLines().forEach { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            if (hostHealth.knownUsers.isNotEmpty()) {
+                Text(
+                    text = "Identities from host: ${hostHealth.knownUsers.joinToString(", ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
             if (hostHealth.dashboardUrl.isNotBlank()) {
                 Text(
                     text = hostHealth.dashboardUrl,
@@ -1335,6 +1445,7 @@ private fun ClipCard(
     onCopy: (String) -> Unit,
     onShare: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
+    onOpenDashboard: ((ClipEntry) -> Unit)? = null,
 ) {
     var expanded by rememberSaveable(entry.id + entry.ts) { mutableStateOf(false) }
     val long = entry.text.length > clipPreviewChars
@@ -1364,6 +1475,9 @@ private fun ClipCard(
             if (directUrl != null && !entry.text.trim().equals(directUrl, ignoreCase = true)) {
                 TextButton(onClick = { onOpenUrl(directUrl) }) { Text("Open link") }
             }
+            if (onOpenDashboard != null) {
+                TextButton(onClick = { onOpenDashboard(entry) }) { Text("On dashboard") }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1392,6 +1506,7 @@ private fun TodoRow(
     item: TodoItem,
     onToggle: (TodoItem) -> Unit,
     onDelete: ((TodoItem) -> Unit)? = null,
+    onOpenDashboard: (() -> Unit)? = null,
 ) {
     Row(
         modifier = Modifier
@@ -1411,6 +1526,9 @@ private fun TodoRow(
             if (meta.isNotBlank()) {
                 Text(meta, style = MaterialTheme.typography.labelSmall, color = EdcMuted)
             }
+        }
+        if (onOpenDashboard != null) {
+            TextButton(onClick = onOpenDashboard) { Text("Dashboard") }
         }
         if (item.done && onDelete != null) {
             TextButton(onClick = { onDelete(item) }) { Text("Remove") }
@@ -1470,9 +1588,12 @@ private fun SectionLabel(text: String) {
 }
 
 @Composable
-private fun EmptyHint(text: String) {
-    Text(text, color = EdcMuted, style = MaterialTheme.typography.bodyMedium)
+private fun EmptyHint(text: String, modifier: Modifier = Modifier) {
+    Text(text, color = EdcMuted, style = MaterialTheme.typography.bodyMedium, modifier = modifier)
 }
+
+private fun effectiveIdentities(health: HostHealth?): List<String> =
+    health?.knownUsers?.takeIf { it.isNotEmpty() } ?: identities
 
 private fun connectionLabel(settings: EdcSettings, stale: Boolean, error: String?): String {
     if (stale && error != null) return "Offline · cached"
