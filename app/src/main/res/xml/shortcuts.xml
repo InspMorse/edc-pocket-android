@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="copy_latest"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_copy"
+        android:shortcutShortLabel="@string/shortcut_copy_latest"
+        android:shortcutLongLabel="@string/shortcut_copy_latest_long">
+        <intent
+            android:action="house.edc.pocket.action.COPY_LATEST"
+            android:targetClass="house.edc.pocket.MainActivity"
+            android:targetPackage="house.edc.pocket" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="open_send"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_send"
+        android:shortcutShortLabel="@string/shortcut_open_send"
+        android:shortcutLongLabel="@string/shortcut_open_send_long">
+        <intent
+            android:action="house.edc.pocket.action.OPEN_SEND"
+            android:targetClass="house.edc.pocket.MainActivity"
+            android:targetPackage="house.edc.pocket" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="open_list"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_list"
+        android:shortcutShortLabel="@string/shortcut_open_list"
+        android:shortcutLongLabel="@string/shortcut_open_list_long">
+        <intent
+            android:action="house.edc.pocket.action.OPEN_LIST"
+            android:targetClass="house.edc.pocket.MainActivity"
+            android:targetPackage="house.edc.pocket" />
+    </shortcut>
+</shortcuts>

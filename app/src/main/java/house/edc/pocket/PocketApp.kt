@@ -64,6 +64,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -121,11 +122,14 @@ fun PocketApp(
     settings: EdcSettings,
     store: SettingsStore,
     client: EdcClient,
+    launchAction: LaunchAction = LaunchAction.NONE,
+    onLaunchActionHandled: () -> Unit = {},
 ) {
     EdcPocketTheme {
         val context = LocalContext.current
         val scope = rememberCoroutineScope()
         val snackbar = remember { SnackbarHostState() }
+        val haptic = rememberEdcHaptic()
         var tab by rememberSaveable { mutableStateOf(PocketTab.CLIP.name) }
         val currentTab = PocketTab.entries.find { it.name == tab } ?: PocketTab.CLIP
         var snapshot by remember { mutableStateOf(HostSnapshot()) }
@@ -133,6 +137,8 @@ fun PocketApp(
         var status by remember { mutableStateOf<String?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
         var stale by remember { mutableStateOf(false) }
+        var hostHealth by remember { mutableStateOf<HostHealth?>(null) }
+        var pullRefreshing by remember { mutableStateOf(false) }
         val resumeTick = rememberResumeTick()
 
         suspend fun refresh(silent: Boolean = false) {
@@ -154,7 +160,7 @@ fun PocketApp(
                     snapshot = it
                     error = null
                     stale = false
-                    status = "Connected as ${settings.identity}"
+                    status = connectionLabel(settings, stale = false, error = null)
                 },
                 onFailure = {
                     error = it.message ?: "Host unreachable"
@@ -188,6 +194,12 @@ fun PocketApp(
             )
         }
 
+        suspend fun pullRefresh() {
+            pullRefreshing = true
+            refresh(silent = true)
+            pullRefreshing = false
+        }
+
         LaunchedEffect(settings.baseUrl, settings.identity, resumeTick) {
             refresh()
         }
@@ -197,6 +209,50 @@ fun PocketApp(
                 delay(pollMs)
                 refresh(silent = true)
             }
+        }
+
+        LaunchedEffect(currentTab, settings.baseUrl, settings.identity) {
+            if (currentTab != PocketTab.SETTINGS || settings.baseUrl.isBlank()) return@LaunchedEffect
+            val health = withContext(Dispatchers.IO) {
+                runCatching { client.probeHealth(settings.baseUrl, settings.identity) }.getOrNull()
+            }
+            if (health != null) hostHealth = health
+        }
+
+        LaunchedEffect(launchAction, settings.baseUrl, settings.identity) {
+            if (launchAction == LaunchAction.NONE) return@LaunchedEffect
+            when (launchAction) {
+                LaunchAction.OPEN_SEND -> tab = PocketTab.SEND.name
+                LaunchAction.OPEN_LIST -> tab = PocketTab.LIST.name
+                LaunchAction.COPY_LATEST -> {
+                    val base = settings.baseUrl
+                    if (base.isBlank()) {
+                        error = "Set a host URL in Settings."
+                    } else {
+                        val result = withContext(Dispatchers.IO) {
+                            runCatching { client.load(base, settings.identity) }
+                        }
+                        result.fold(
+                            onSuccess = { snap ->
+                                val text = snap.latest?.text ?: snap.history.firstOrNull()?.text
+                                if (text.isNullOrBlank()) {
+                                    snackbar.showSnackbar("Nothing on the house clipboard")
+                                } else {
+                                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                    clipboard.setPrimaryClip(ClipData.newPlainText("EDC", text))
+                                    haptic()
+                                    snackbar.showSnackbar("Copied latest clip")
+                                }
+                            },
+                            onFailure = {
+                                error = it.message ?: "Host unreachable"
+                            },
+                        )
+                    }
+                }
+                LaunchAction.NONE -> Unit
+            }
+            onLaunchActionHandled()
         }
 
         Scaffold(
@@ -209,7 +265,7 @@ fun PocketApp(
                         Column {
                             Text("EDC pocket")
                             Text(
-                                text = settings.identity + " · " + hostLabel(settings),
+                                text = settings.identity + " · " + connectionLabel(settings, stale, error),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = EdcMuted,
                             )
@@ -290,9 +346,14 @@ fun PocketApp(
                     PocketTab.CLIP -> ClipPane(
                         latest = snapshot.latest,
                         history = snapshot.history,
+                        filter = settings.clipFilter,
+                        onFilterChange = { scope.launch { store.setClipFilter(it) } },
+                        isRefreshing = pullRefreshing,
+                        onRefresh = { scope.launch { pullRefresh() } },
                         onCopy = { text ->
                             val clipboard = context.getSystemService(ClipboardManager::class.java)
                             clipboard.setPrimaryClip(ClipData.newPlainText("EDC", text))
+                            haptic()
                             scope.launch { snackbar.showSnackbar("Copied") }
                         },
                         onShare = { text ->
@@ -308,20 +369,25 @@ fun PocketApp(
                                 hostCall("Sent to clipboard") {
                                     client.sendText(settings.baseUrl, settings.identity, text)
                                 }
+                                haptic()
                             }
                         },
                     )
                     PocketTab.LIST -> ListPane(
                         todos = snapshot.todos,
+                        isRefreshing = pullRefreshing,
+                        onRefresh = { scope.launch { pullRefresh() } },
                         onAdd = { text ->
                             scope.launch {
                                 hostCall("Added to list") {
                                     client.addTodo(settings.baseUrl, settings.identity, text)
                                 }
+                                haptic()
                             }
                         },
                         onToggle = { item ->
                             val next = !item.done
+                            haptic()
                             snapshot = snapshot.copy(
                                 todos = snapshot.todos.map {
                                     if (it.id == item.id) it.copy(done = next) else it
@@ -339,6 +405,7 @@ fun PocketApp(
                             }
                         },
                         onDelete = { item ->
+                            haptic()
                             snapshot = snapshot.copy(
                                 todos = snapshot.todos.filter { it.id != item.id },
                             )
@@ -422,6 +489,7 @@ fun PocketApp(
                                 result.fold(
                                     onSuccess = {
                                         error = null
+                                        hostHealth = it
                                         status = it.summary()
                                         snackbar.showSnackbar(it.summary())
                                     },
@@ -444,9 +512,17 @@ fun PocketApp(
                                 }
                                 found.preset?.let { store.rememberWorkingPreset(it) }
                                 error = null
+                                hostHealth = found.health
                                 status = found.health.summary() + " · ${found.baseUrl}"
                                 snackbar.showSnackbar("Using ${found.preset?.label ?: "host"}")
                                 refresh()
+                            }
+                        },
+                        hostHealth = hostHealth,
+                        onOpenDashboard = {
+                            val url = hostHealth?.dashboardUrl?.takeIf { it.isNotBlank() }
+                            if (url != null) openUrl(context, url) else scope.launch {
+                                snackbar.showSnackbar("No dashboard URL from host")
                             }
                         },
                     )
@@ -470,18 +546,21 @@ private fun rememberResumeTick(): Int {
     return tick
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ClipPane(
     latest: ClipEntry?,
     history: List<ClipEntry>,
+    filter: String,
+    onFilterChange: (String) -> Unit,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
     onCopy: (String) -> Unit,
     onShare: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
     onSend: (String) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
-    var filter by rememberSaveable { mutableStateOf("All") }
     val filteredHistory = history.filter { entry ->
         filter == "All" || entry.from.equals(filter, ignoreCase = true)
     }.let { list ->
@@ -497,7 +576,7 @@ private fun ClipPane(
             clipFilters.forEach { name ->
                 FilterChip(
                     selected = filter == name,
-                    onClick = { filter = name },
+                    onClick = { onFilterChange(name) },
                     label = { Text(name) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Color(0xFF0E3A43),
@@ -506,11 +585,16 @@ private fun ClipPane(
                 )
             }
         }
-        LazyColumn(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             item {
                 SectionLabel("Latest")
                 Spacer(Modifier.height(8.dp))
@@ -539,6 +623,7 @@ private fun ClipPane(
                 }
             }
         }
+        }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         SendField(
             value = draft,
@@ -556,9 +641,12 @@ private fun ClipPane(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ListPane(
     todos: List<TodoItem>,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
     onAdd: (String) -> Unit,
     onToggle: (TodoItem) -> Unit,
     onDelete: (TodoItem) -> Unit,
@@ -592,11 +680,16 @@ private fun ListPane(
                 Text("Copy / share list")
             }
         }
-        LazyColumn(
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
             modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
             if (todos.isEmpty()) {
                 item { EmptyHint("List is empty.") }
             }
@@ -616,6 +709,7 @@ private fun ListPane(
                     )
                 }
             }
+        }
         }
     }
 }
@@ -746,11 +840,13 @@ private fun SendPane(
 @Composable
 private fun SettingsPane(
     settings: EdcSettings,
+    hostHealth: HostHealth?,
     onIdentity: (String) -> Unit,
     onPreset: (HostPreset) -> Unit,
     onCustomUrl: (String) -> Unit,
     onProbe: () -> Unit,
     onFindHost: () -> Unit,
+    onOpenDashboard: () -> Unit,
 ) {
     var customDraft by remember(settings.customUrl) { mutableStateOf(settings.customUrl) }
     Column(
@@ -811,6 +907,24 @@ private fun SettingsPane(
         OutlinedButton(onClick = onFindHost, modifier = Modifier.fillMaxWidth()) {
             Text("Find host (Home, then Away)")
         }
+        if (hostHealth != null) {
+            SectionLabel("Host info")
+            Text(
+                text = hostHealth.summary(),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (hostHealth.dashboardUrl.isNotBlank()) {
+                Text(
+                    text = hostHealth.dashboardUrl,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            OutlinedButton(onClick = onOpenDashboard, modifier = Modifier.fillMaxWidth()) {
+                Text("Open house dashboard")
+            }
+        }
         Text(
             text = "Home Wi-Fi uses the house LAN. Away needs Tailscale on this phone. Find host tries both and keeps whichever answers.",
             style = MaterialTheme.typography.bodySmall,
@@ -843,7 +957,9 @@ private fun ClipCard(
                 text = shown,
                 color = EdcInk,
                 onOpenUrl = onOpenUrl,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onCopy(entry.text) },
             )
             if (long) {
                 TextButton(onClick = { expanded = !expanded }) {
@@ -963,12 +1079,15 @@ private fun EmptyHint(text: String) {
     Text(text, color = EdcMuted, style = MaterialTheme.typography.bodyMedium)
 }
 
-private fun hostLabel(settings: EdcSettings): String =
-    if (settings.preset == HostPreset.CUSTOM) {
-        settings.customUrl.ifBlank { "Custom" }
-    } else {
-        settings.preset.label
+private fun connectionLabel(settings: EdcSettings, stale: Boolean, error: String?): String {
+    if (stale && error != null) return "Offline · cached"
+    if (error != null) return "Unreachable"
+    return when (settings.preset) {
+        HostPreset.LAN -> "Home LAN"
+        HostPreset.TAILSCALE -> "Away"
+        HostPreset.CUSTOM -> settings.customUrl.ifBlank { "Custom" }
     }
+}
 
 private fun metaLine(from: String, ts: String, extra: String = ""): String =
     listOf(from, formatTs(ts), extra).filter { it.isNotBlank() }.joinToString(" · ")

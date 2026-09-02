@@ -2,4 +2,10 @@
 <resources>
     <string name="app_name">EDC pocket</string>
     <string name="share_label">Send to EDC</string>
+    <string name="shortcut_copy_latest">Copy latest clip</string>
+    <string name="shortcut_copy_latest_long">Copy the house clipboard</string>
+    <string name="shortcut_open_send">Send to house</string>
+    <string name="shortcut_open_send_long">Open Send tab</string>
+    <string name="shortcut_open_list">Open list</string>
+    <string name="shortcut_open_list_long">Open the to-do list</string>
 </resources>

@@ -2,6 +2,8 @@
 
 Open this folder in **Android Studio** and build an APK. The native app talks HTTP to the house host directly, so the browser mixed-content block does not apply.
 
+See **[ROADMAP.md](ROADMAP.md)** for the full product plan (Phase 0–6).
+
 ## Build APK
 
 1. Android Studio → **Open** → this repository folder.

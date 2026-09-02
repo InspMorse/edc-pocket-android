@@ -19,6 +19,7 @@ data class EdcSettings(
     val identity: String = "Mike",
     val preset: HostPreset = HostPreset.LAN,
     val customUrl: String = "",
+    val clipFilter: String = "All",
 ) {
     val baseUrl: String
         get() = when (preset) {
@@ -31,6 +32,7 @@ class SettingsStore(private val context: Context) {
     private val identityKey = stringPreferencesKey("identity")
     private val presetKey = stringPreferencesKey("preset")
     private val customKey = stringPreferencesKey("custom_url")
+    private val clipFilterKey = stringPreferencesKey("clip_filter")
 
     val settings: Flow<EdcSettings> = context.dataStore.data.map { prefs ->
         EdcSettings(
@@ -38,6 +40,7 @@ class SettingsStore(private val context: Context) {
             preset = runCatching { HostPreset.valueOf(prefs[presetKey] ?: "LAN") }
                 .getOrDefault(HostPreset.LAN),
             customUrl = prefs[customKey] ?: "",
+            clipFilter = prefs[clipFilterKey] ?: "All",
         )
     }
 
@@ -55,5 +58,9 @@ class SettingsStore(private val context: Context) {
 
     suspend fun rememberWorkingPreset(preset: HostPreset) {
         context.dataStore.edit { it[presetKey] = preset.name }
+    }
+
+    suspend fun setClipFilter(value: String) {
+        context.dataStore.edit { it[clipFilterKey] = value }
     }
 }
