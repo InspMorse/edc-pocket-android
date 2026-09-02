@@ -29,6 +29,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Checklist
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -36,7 +37,6 @@ import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.PhotoCamera
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Send
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -225,7 +225,7 @@ fun PocketApp(
                                     imageVector = when (item) {
                                         PocketTab.CLIP -> Icons.Outlined.ContentPaste
                                         PocketTab.LIST -> Icons.Outlined.Checklist
-                                        PocketTab.SEND -> Icons.Outlined.Send
+                                        PocketTab.SEND -> Icons.AutoMirrored.Outlined.Send
                                         PocketTab.SETTINGS -> Icons.Outlined.Settings
                                     },
                                     contentDescription = item.label,
@@ -732,7 +732,7 @@ private fun SendField(
     placeholder: String,
     actionLabel: String,
     onAction: () -> Unit,
-    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.Outlined.Send,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.AutoMirrored.Outlined.Send,
 ) {
     val keyboard = LocalSoftwareKeyboardController.current
     Row(
