@@ -12,7 +12,24 @@ See **[ROADMAP.md](ROADMAP.md)** for the full product plan (Phases 0–12 + moon
 4. Install `app/build/outputs/apk/debug/app-debug.apk` on the phone (allow unknown sources).
 5. Open **EDC pocket**. Pick **Mike** or **Mhairi**. Tap **Home Wi-Fi**. Test connection.
 
-From the command line: `./gradlew assembleDebug`. The APK lands in the same `app/build/outputs/apk/debug/` folder.
+From the command line:
+
+```bash
+./gradlew testDebugUnitTest assembleDebug   # tests + debug APK
+./gradlew assembleRelease                   # release APK (see signing below)
+```
+
+Debug APK: `app/build/outputs/apk/debug/app-debug.apk`  
+Release APK: `app/build/outputs/apk/release/app-release.apk`
+
+### Signed release (optional)
+
+1. Copy `keystore.properties.example` → `keystore.properties` and fill in your keystore paths/passwords.
+2. Run `./gradlew assembleRelease`.
+
+Without `keystore.properties`, release builds use the debug keystore (fine for sideloading, not for Play Store).
+
+CI runs on every push/PR — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 ## What it does
 
@@ -27,10 +44,26 @@ From the command line: `./gradlew assembleDebug`. The APK lands in the same `app
 - **v0.4** — home screen widget, Quick Settings tile, background clip alerts
 - **v0.5** — Incoming thumbnails, multi-photo, share session, clip search, undo delete
 - **v0.6** — host capability discovery, graceful UI degradation, identity sync, dashboard deep links, optional HTTPS
+- **v1.0** — integration tests, Compose smoke test, CI, release build, changelog ([CHANGELOG.md](CHANGELOG.md))
 
-See **[ROADMAP.md](ROADMAP.md)** — **v0.6** shipped (Phases 0–5); **73 items** remain through Phase 12 (1.0 → 2.0).
+See **[ROADMAP.md](ROADMAP.md)** — **v1.0** shipped (Phase 6); Phases **7–12** remain toward **2.0**.
 
 Client only. Never hosts.
+
+## Privacy & permissions
+
+EDC pocket is a **personal house client**. It talks only to hosts you configure (Home LAN, Tailscale Away, or Custom URL). No third-party analytics or cloud backend in the app.
+
+| Permission | Why |
+|------------|-----|
+| **INTERNET** | Read/write clipboard, list, and Incoming on your house host |
+| **ACCESS_NETWORK_STATE** | Auto Home/Away switching when Wi‑Fi or VPN changes |
+| **POST_NOTIFICATIONS** | Optional “new clip” alerts (Android 13+; only if you enable background poll) |
+| **Camera** *(optional hardware)* | Send tab — take a photo to Incoming; not required to install |
+
+**Data stored on device:** identity name, host URL preset, clip filter, outbox queue, widget/notification cache, and DataStore preferences. Queued photos are copied to app storage until sent.
+
+**Cleartext HTTP:** enabled so the app can reach typical home LAN hosts (`http://192.168.x.x`). Use the Settings **Use HTTPS** toggle when your host serves TLS.
 
 ## Hosts
 

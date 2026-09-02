@@ -32,31 +32,31 @@ Mike and Mhairi can read and write the **house clipboard**, manage the shared **
 
 | | |
 |---|---|
-| **Current release** | **v0.6** (Phase 5) |
-| **Shipped** | Phases **0–5** — foundation through host capabilities |
-| **Next milestone** | Phase **6** → tagged **1.0** |
-| **Through Phase 12** | **73** remaining items (6.1–12.10) |
+| **Current release** | **v1.0** (Phase 6) |
+| **Shipped** | Phases **0–6** — foundation through trust & release |
+| **Next milestone** | Phase **7** → **1.1** |
+| **Through Phase 12** | **59** remaining items (7.1–12.10) |
 | **Carried forward** | 5.6 FCM push → **8.3** (needs host API) |
 
 **Branch:** `cursor/finish-edc-pocket-android-f18a` · **PR:** [#2](https://github.com/InspMorse/edc-pocket-android/pull/2)
 
 ---
 
-## Remaining roadmap (Phases 6–12)
+## Remaining roadmap (Phases 7–12)
 
 Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = after prior phase ships.
 
 | Phase | Target version | Goal | Items | Status |
 |-------|----------------|------|-------|--------|
-| **6** | **1.0** | Quality, trust & release | 6.1–6.8 | **Next** |
-| **7** | 1.1–1.2 | Everyday delight | 7.1–7.10 | Planned |
+| **6** | **1.0** | Quality, trust & release | 6.1–6.8 | **Done** |
+| **7** | 1.1–1.2 | Everyday delight | 7.1–7.10 | **Next** |
 | **8** | 1.3–1.4 | Always in sync | 8.1–8.9 (+ 5.6) | Planned |
 | **9** | 1.5–1.6 | More surfaces | 9.1–9.10 | Planned |
 | **10** | 1.7–1.8 | Smarter house | 10.1–10.10 | Planned |
 | **11** | 1.9–2.0 | Beyond clipboard | 11.1–11.10 | Planned |
 | **12** | 2.x | Trust at scale | 12.1–12.10 | Planned |
 
-**Spine:** `Phase 6 (1.0) → 7 → 8 → 9 → 10 → 11 → 12 (2.0)`
+**Spine:** `Phase 7 (1.1) → 8 → 9 → 10 → 11 → 12 (2.0)`
 
 **Host-dependent batches** (coordinate Everyday Clipboard host repo):
 
@@ -159,26 +159,26 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 
 ---
 
-## Phase 6 — Quality, trust & release (**next** → **1.0**)
+## Phase 6 — Quality, trust & release (done → **1.0**)
 
 **Goal:** Safe to install long-term; easy to ship updates.
 
 | # | Item | Status |
 |---|------|--------|
-| 6.1 | EdcClient MockWebServer integration tests | Pending |
-| 6.2 | Compose UI smoke tests | Pending |
-| 6.3 | Signed release build | Pending |
-| 6.4 | GitHub Actions CI | Pending |
-| 6.5 | Changelog / GitHub Releases | Pending |
-| 6.6 | Play internal track (optional) | Pending |
-| 6.7 | Privacy / permissions audit in README | Pending |
-| 6.8 | Crash reporting (optional) | Pending |
+| 6.1 | EdcClient MockWebServer integration tests | Done |
+| 6.2 | Compose UI smoke tests | Done |
+| 6.3 | Signed release build | Done |
+| 6.4 | GitHub Actions CI | Done |
+| 6.5 | Changelog / GitHub Releases | Done |
+| 6.6 | Play internal track (optional) | Skipped |
+| 6.7 | Privacy / permissions audit in README | Done |
+| 6.8 | Crash reporting (optional) | Skipped |
 
 **Exit criteria:** Tagged **1.0** release APK; CI green on every PR; integration tests cover host client flows.
 
 ---
 
-## Phase 7 — Everyday delight (1.1–1.2)
+## Phase 7 — Everyday delight (**next** → 1.1–1.2)
 
 **Goal:** First-run and daily use feel obvious, fast, and pleasant — not just functional.
 
@@ -333,9 +333,9 @@ Nothing off the table — park here until a host API or strong user pull exists.
 | **0.3** | Phase 2 | Shipped |
 | **0.4** | Phase 3 | Shipped |
 | **0.5** | Phase 4 | Shipped |
-| **0.6** | Phase 5 | **Current** |
-| **1.0** | Phase 6 | **Next** |
-| **1.1–1.2** | Phase 7 | Planned |
+| **0.6** | Phase 5 | Shipped |
+| **1.0** | Phase 6 | **Current** |
+| **1.1–1.2** | Phase 7 | **Next** |
 | **1.3–1.4** | Phase 8 | Planned |
 | **1.5–1.6** | Phase 9 | Planned |
 | **1.7–1.8** | Phase 10 | Planned |
@@ -344,12 +344,10 @@ Nothing off the table — park here until a host API or strong user pull exists.
 
 Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 
-### Full remaining checklist (6.1 → 12.10)
+### Full remaining checklist (7.1 → 12.10)
 
 <details>
-<summary>73 items — expand to scan</summary>
-
-**Phase 6 (1.0):** 6.1 integration tests · 6.2 UI smoke tests · 6.3 signed release · 6.4 CI · 6.5 changelog/releases · 6.6 Play internal · 6.7 privacy audit · 6.8 crash reporting  
+<summary>59 items — expand to scan</summary>
 
 **Phase 7:** 7.1 onboarding · 7.2 clip swipes · 7.3 swipe complete · 7.4 rich previews · 7.5 pin/star · 7.6 list sort/filter · 7.7 error copy · 7.8 theme sync · 7.9 tablet layout · 7.10 animation polish  
 
@@ -401,10 +399,10 @@ Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 **Sequential spine (required order for major releases)**
 
 ```
-v0.6 (now) → Phase 6 (1.0) → 7 → 8 → 9 → 10 → 11 → 12 (2.0)
+v1.0 (now) → Phase 7 (1.1) → 8 → 9 → 10 → 11 → 12 (2.0)
 ```
 
-**Parallel tracks** — can overlap once **1.0** ships:
+**Parallel tracks** — can overlap now that **1.0** shipped:
 
 | Track | Phases | Focus |
 |-------|--------|--------|
@@ -414,7 +412,7 @@ v0.6 (now) → Phase 6 (1.0) → 7 → 8 → 9 → 10 → 11 → 12 (2.0)
 | **Surfaces** | 9 | Widget, tile, voice, Wear, NFC |
 | **House** | 10 | Multi-host, discovery, dashboard |
 
-**Recommended batches after 1.0**
+**Recommended batches (Phase 7 first)**
 
 | Batch | Items | Why |
 |-------|-------|-----|

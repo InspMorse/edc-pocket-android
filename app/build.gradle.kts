@@ -4,6 +4,15 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+import java.util.Properties
+
+val keystorePropertiesFile = rootProject.file("keystore.properties")
+val keystoreProperties = Properties().apply {
+    if (keystorePropertiesFile.exists()) {
+        keystorePropertiesFile.inputStream().use { load(it) }
+    }
+}
+
 android {
     namespace = "house.edc.pocket"
     compileSdk = 35
@@ -12,8 +21,19 @@ android {
         applicationId = "house.edc.pocket"
         minSdk = 31
         targetSdk = 35
-        versionCode = 6
-        versionName = "0.6"
+        versionCode = 7
+        versionName = "1.0"
+    }
+
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+            }
+        }
     }
 
     buildTypes {
@@ -23,6 +43,10 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            signingConfig = when {
+                keystorePropertiesFile.exists() -> signingConfigs.getByName("release")
+                else -> signingConfigs.getByName("debug")
+            }
         }
     }
 
@@ -37,6 +61,12 @@ android {
 
     buildFeatures {
         compose = true
+    }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+        }
     }
 }
 
@@ -59,6 +89,9 @@ dependencies {
     implementation("androidx.glance:glance-material3:1.1.1")
     implementation("io.coil-kt:coil-compose:2.7.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    testImplementation(composeBom)
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20240303")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("org.robolectric:robolectric:4.14.1")
 }
