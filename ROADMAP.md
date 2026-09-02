@@ -53,26 +53,26 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 
 ---
 
-## Phase 2 — Smart connectivity (next)
+## Phase 2 — Smart connectivity (done)
 
 **Goal:** Right host, right network, no lost sends.
 
-| # | Item |
-|---|------|
-| 2.1 | Auto Home/Away on Wi‑Fi or Tailscale |
-| 2.2 | Re-probe on network change |
-| 2.3 | Offline outbox for clip/list/photo sends |
-| 2.4 | Outbox UI (pending, retry, clear) |
-| 2.5 | Smarter polling (back off when idle) |
-| 2.6 | Flush outbox on resume |
-| 2.7 | Custom URL validation |
-| 2.8 | Tailscale hint when Away fails |
+| # | Item | Status |
+|---|------|--------|
+| 2.1 | Auto Home/Away on Wi‑Fi or Tailscale | Done |
+| 2.2 | Re-probe on network change | Done |
+| 2.3 | Offline outbox for clip/list/photo sends | Done |
+| 2.4 | Outbox UI (pending, retry, clear) | Done |
+| 2.5 | Smarter polling (back off when idle) | Done |
+| 2.6 | Flush outbox on resume | Done |
+| 2.7 | Custom URL validation | Done |
+| 2.8 | Tailscale hint when Away fails | Done |
 
 **Exit criteria:** Phone switches Home/Away without manual Find host; sends survive brief outages.
 
 ---
 
-## Phase 3 — Glanceable access
+## Phase 3 — Glanceable access (next)
 
 **Goal:** Use the house clipboard without opening the full app.
 
@@ -143,8 +143,8 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 | Version | Scope |
 |---------|--------|
 | **0.1** | Phase 0 |
-| **0.2** | Phase 1 (current) |
-| **0.3** | Phase 2 |
+| **0.2** | Phase 1 |
+| **0.3** | Phase 2 (current) |
 | **0.4** | Phase 3 |
 | **0.5** | Phase 4 |
 | **1.0** | Phase 6 release |

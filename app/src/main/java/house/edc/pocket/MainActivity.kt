@@ -7,6 +7,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
     private val launchActionState = mutableStateOf(LaunchAction.NONE)
@@ -14,6 +17,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        EdcNotifications.ensureChannel(this)
         launchActionState.value = intent.launchAction()
         val store = SettingsStore(this)
         val outboxStore = OutboxStore(this)
@@ -21,6 +25,10 @@ class MainActivity : ComponentActivity() {
         val outboxProcessor = OutboxProcessor(client, outboxStore)
         val hostConnector = HostConnector(client)
         val networkMonitor = NetworkMonitor(this)
+        lifecycleScope.launch {
+            val settings = store.settings.first()
+            PollScheduler.apply(this@MainActivity, settings.backgroundPoll)
+        }
         setContent {
             val settings by store.settings.collectAsState(initial = EdcSettings())
             val launchAction by launchActionState

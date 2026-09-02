@@ -1,9 +1,11 @@
 package house.edc.pocket
 
+import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -137,6 +139,9 @@ fun PocketApp(
         val scope = rememberCoroutineScope()
         val snackbar = remember { SnackbarHostState() }
         val haptic = rememberEdcHaptic()
+        val notifPermission = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+        ) { _ -> }
         val networkKind by networkMonitor.networkKind.collectAsState(initial = NetworkKind.OTHER)
         val outboxItems by outboxStore.items.collectAsState(initial = emptyList())
         var tab by rememberSaveable { mutableStateOf(PocketTab.CLIP.name) }
@@ -171,6 +176,11 @@ fun PocketApp(
                     error = null
                     stale = false
                     status = connectionLabel(settings, stale = false, error = null)
+                    val entry = it.latest ?: it.history.firstOrNull()
+                    if (entry != null) {
+                        LatestClipStore(context).save(entry)
+                        scope.launch { EdcWidgetUpdater.updateAll(context) }
+                    }
                 },
                 onFailure = {
                     error = hostFailureMessage(settings, it.message)
@@ -249,6 +259,10 @@ fun PocketApp(
             refresh(silent = true)
             flushOutbox(notify = false)
             pullRefreshing = false
+        }
+
+        LaunchedEffect(settings.backgroundPoll) {
+            PollScheduler.apply(context, settings.backgroundPoll)
         }
 
         LaunchedEffect(settings.baseUrl, settings.identity, resumeTick) {
@@ -628,6 +642,14 @@ fun PocketApp(
                         outboxItems = outboxItems,
                         autoHost = settings.autoHost,
                         onAutoHost = { scope.launch { store.setAutoHost(it) } },
+                        backgroundPoll = settings.backgroundPoll,
+                        onBackgroundPoll = { mode ->
+                            scope.launch { store.setBackgroundPoll(mode) }
+                            PollScheduler.apply(context, mode)
+                            if (mode != BackgroundPollMode.OFF && Build.VERSION.SDK_INT >= 33) {
+                                notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
                         urlValidationError = urlValidationError,
                         onCustomUrl = { raw ->
                             val err = validateHostUrl(raw)
@@ -971,6 +993,8 @@ private fun SettingsPane(
     onProbe: () -> Unit,
     onFindHost: () -> Unit,
     onAutoHost: (Boolean) -> Unit,
+    backgroundPoll: BackgroundPollMode,
+    onBackgroundPoll: (BackgroundPollMode) -> Unit,
     onFlushOutbox: () -> Unit,
     onClearOutbox: () -> Unit,
     onOpenDashboard: () -> Unit,
@@ -1041,6 +1065,34 @@ private fun SettingsPane(
             }
             Switch(checked = autoHost, onCheckedChange = onAutoHost)
         }
+        SectionLabel("Glanceable")
+        Text(
+            text = "Add the home screen widget, Quick Settings tile “EDC clip”, and optional background alerts.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BackgroundPollMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = backgroundPoll == mode,
+                    onClick = { onBackgroundPoll(mode) },
+                    label = { Text(mode.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcCyan,
+                    ),
+                )
+            }
+        }
+        Text(
+            text = when (backgroundPoll) {
+                BackgroundPollMode.OFF -> "No background checks."
+                BackgroundPollMode.CONSERVATIVE -> "Checks about once an hour when idle."
+                BackgroundPollMode.ACTIVE -> "Checks every 15 minutes (Android minimum)."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
         Text(
             text = settings.baseUrl.ifBlank { "No host URL set" },
             fontFamily = FontFamily.Monospace,

@@ -22,6 +22,7 @@ data class EdcSettings(
     val customUrl: String = "",
     val clipFilter: String = "All",
     val autoHost: Boolean = true,
+    val backgroundPoll: BackgroundPollMode = BackgroundPollMode.OFF,
 ) {
     val baseUrl: String
         get() = when (preset) {
@@ -37,6 +38,8 @@ class SettingsStore(private val context: Context) {
     private val clipFilterKey = stringPreferencesKey("clip_filter")
     private val autoHostKey = booleanPreferencesKey("auto_host")
 
+    val backgroundPollKey = stringPreferencesKey("background_poll")
+
     val settings: Flow<EdcSettings> = context.dataStore.data.map { prefs ->
         EdcSettings(
             identity = prefs[identityKey] ?: "Mike",
@@ -45,6 +48,9 @@ class SettingsStore(private val context: Context) {
             customUrl = prefs[customKey] ?: "",
             clipFilter = prefs[clipFilterKey] ?: "All",
             autoHost = prefs[autoHostKey] ?: true,
+            backgroundPoll = runCatching {
+                BackgroundPollMode.valueOf(prefs[backgroundPollKey] ?: "OFF")
+            }.getOrDefault(BackgroundPollMode.OFF),
         )
     }
 
@@ -70,5 +76,9 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setAutoHost(value: Boolean) {
         context.dataStore.edit { it[autoHostKey] = value }
+    }
+
+    suspend fun setBackgroundPoll(value: BackgroundPollMode) {
+        context.dataStore.edit { it[backgroundPollKey] = value.name }
     }
 }

@@ -8,4 +8,9 @@
     <string name="shortcut_open_send_long">Open Send tab</string>
     <string name="shortcut_open_list">Open list</string>
     <string name="shortcut_open_list_long">Open the to-do list</string>
+    <string name="widget_description">Latest house clipboard — copy or open EDC pocket</string>
+    <string name="tile_copy_clip">EDC clip</string>
+    <string name="poll_off">Background clip alerts off</string>
+    <string name="poll_conservative">Background clip alerts every hour</string>
+    <string name="poll_active">Background clip alerts every 15 minutes</string>
 </resources>
