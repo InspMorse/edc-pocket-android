@@ -50,6 +50,7 @@ data class HostHealth(
     val capabilities: HostCapabilities = HostCapabilities.ALL,
     val knownUsers: List<String> = emptyList(),
     val linkTemplates: HostLinkTemplates = HostLinkTemplates(),
+    val themeAccent: String = "",
 ) {
     fun summary(): String {
         if (!ok) return "Host unreachable"

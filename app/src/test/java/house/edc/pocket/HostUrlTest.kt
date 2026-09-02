@@ -29,6 +29,6 @@ class HostUrlTest {
     @Test
     fun tailscaleHintOnAwayFailure() {
         val settings = EdcSettings(preset = HostPreset.TAILSCALE)
-        assertTrue(hostFailureMessage(settings, "Timeout").contains("Tailscale"))
+        assertTrue(hostFailureMessage(settings, "timeout").contains("Tailscale"))
     }
 }

@@ -64,6 +64,7 @@ class EdcClient(
                 clipboardItem = health.linkTemplates.clipboardItem.ifBlank { links.clipboardItem },
                 todoItem = health.linkTemplates.todoItem.ifBlank { links.todoItem },
             ),
+            themeAccent = health.themeAccent.ifBlank { parseThemeAccentFromJson(root) },
         )
     }
 

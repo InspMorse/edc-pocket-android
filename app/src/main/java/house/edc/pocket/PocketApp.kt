@@ -49,6 +49,14 @@ import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.outlined.Phone
+import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -141,9 +149,25 @@ fun PocketApp(
     launchAction: LaunchAction = LaunchAction.NONE,
     onLaunchActionHandled: () -> Unit = {},
 ) {
-    EdcPocketTheme {
-        val context = LocalContext.current
-        val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val pinStore = remember(context) { PinStore(context) }
+    val pinnedClipKeys by pinStore.pinnedClipKeys.collectAsState(initial = emptySet())
+    val pinnedTodoIds by pinStore.pinnedTodoIds.collectAsState(initial = emptySet())
+    var hostHealth by remember { mutableStateOf<HostHealth?>(null) }
+
+    if (!settings.onboardingComplete) {
+        EdcPocketTheme(hostAccent = parseThemeAccentFromHealth(hostHealth)) {
+            OnboardingFlow(
+                store = store,
+                client = client,
+                onComplete = { },
+            )
+        }
+        return
+    }
+
+    EdcPocketTheme(hostAccent = parseThemeAccentFromHealth(hostHealth)) {
         val snackbar = remember { SnackbarHostState() }
         val haptic = rememberEdcHaptic()
         val notifPermission = rememberLauncherForActivityResult(
@@ -158,7 +182,6 @@ fun PocketApp(
         var status by remember { mutableStateOf<String?>(null) }
         var error by remember { mutableStateOf<String?>(null) }
         var stale by remember { mutableStateOf(false) }
-        var hostHealth by remember { mutableStateOf<HostHealth?>(null) }
         var pullRefreshing by remember { mutableStateOf(false) }
         var urlValidationError by remember { mutableStateOf<String?>(null) }
         var uploadProgress by remember { mutableStateOf<UploadProgress?>(null) }
@@ -196,12 +219,12 @@ fun PocketApp(
                     }
                 },
                 onFailure = {
-                    error = hostFailureMessage(settings, it.message)
-                    status = null
                     stale = snapshot.latest != null ||
                         snapshot.history.isNotEmpty() ||
                         snapshot.todos.isNotEmpty() ||
                         snapshot.drops.isNotEmpty()
+                    error = hostFailureMessage(settings, it.message, stale = stale)
+                    status = null
                 },
             )
         }
@@ -416,7 +439,7 @@ fun PocketApp(
                                     .padding(end = 8.dp)
                                     .size(18.dp),
                                 strokeWidth = 2.dp,
-                                color = EdcCyan,
+                                color = EdcAccent,
                             )
                         }
                         IconButton(onClick = { scope.launch { refresh() } }) {
@@ -483,7 +506,162 @@ fun PocketApp(
                     )
                 }
                 val caps = hostHealth?.capabilities ?: HostCapabilities.ALL
-                when (currentTab) {
+                val configuration = LocalConfiguration.current
+                val wideLayout = configuration.screenWidthDp >= 840
+                if (wideLayout && (currentTab == PocketTab.CLIP || currentTab == PocketTab.LIST)) {
+                    Row(Modifier.fillMaxSize()) {
+                        ClipPane(
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            latest = snapshot.latest,
+                            history = snapshot.history,
+                            filter = settings.clipFilter,
+                            clipboardEnabled = caps.clipboard,
+                            onFilterChange = { scope.launch { store.setClipFilter(it) } },
+                            isRefreshing = pullRefreshing,
+                            onRefresh = { scope.launch { pullRefresh() } },
+                            onCopy = { text ->
+                                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                clipboard.setPrimaryClip(ClipData.newPlainText("EDC", text))
+                                haptic()
+                                scope.launch { snackbar.showSnackbar("Copied") }
+                            },
+                            onShare = { text ->
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, text)
+                                }
+                                context.startActivity(Intent.createChooser(send, "Share clip"))
+                            },
+                            onOpenUrl = { openUrl(context, it) },
+                            onOpenDashboard = { entry ->
+                                HostLinks.clipDashboardUrl(hostHealth, entry)?.let { openUrl(context, it) }
+                                    ?: scope.launch { snackbar.showSnackbar("No dashboard link for this clip") }
+                            },
+                            showDashboardLinks = caps.dashboard,
+                            pinnedClipKeys = pinnedClipKeys,
+                            onTogglePin = { entry ->
+                                scope.launch {
+                                    pinStore.toggleClip(entry)
+                                    haptic()
+                                }
+                            },
+                            onSend = { text ->
+                                scope.launch {
+                                    sendWithOutbox(
+                                        okMessage = "Sent to clipboard",
+                                        enqueueItem = {
+                                            OutboxItem(kind = OutboxKind.CLIP, text = text)
+                                        },
+                                        send = {
+                                            client.sendText(settings.baseUrl, settings.identity, text)
+                                        },
+                                    )
+                                }
+                            },
+                        )
+                        VerticalDivider()
+                        ListPane(
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            todos = snapshot.todos,
+                            listEnabled = caps.todo,
+                            shareListEnabled = caps.todoText,
+                            deleteEnabled = caps.todoDelete,
+                            showDashboardLinks = caps.dashboard,
+                            sortMode = settings.listSortMode,
+                            personFilter = settings.listPersonFilter,
+                            identity = settings.identity,
+                            pinnedTodoIds = pinnedTodoIds,
+                            onSortChange = { scope.launch { store.setListSortMode(it) } },
+                            onPersonFilterChange = { scope.launch { store.setListPersonFilter(it) } },
+                            onTogglePin = { id ->
+                                scope.launch {
+                                    pinStore.toggleTodo(id)
+                                    haptic()
+                                }
+                            },
+                            isRefreshing = pullRefreshing,
+                            onRefresh = { scope.launch { pullRefresh() } },
+                            onAdd = { text ->
+                                scope.launch {
+                                    sendWithOutbox(
+                                        okMessage = "Added to list",
+                                        enqueueItem = {
+                                            OutboxItem(kind = OutboxKind.LIST, text = text)
+                                        },
+                                        send = {
+                                            client.addTodo(settings.baseUrl, settings.identity, text)
+                                        },
+                                    )
+                                }
+                            },
+                            onToggle = { item ->
+                                val next = !item.done
+                                haptic()
+                                snapshot = snapshot.copy(
+                                    todos = snapshot.todos.map {
+                                        if (it.id == item.id) it.copy(done = next) else it
+                                    },
+                                )
+                                scope.launch {
+                                    hostCall(null) {
+                                        client.toggleTodo(
+                                            settings.baseUrl,
+                                            settings.identity,
+                                            item.id,
+                                            next,
+                                        )
+                                    }
+                                }
+                            },
+                            onDelete = { item ->
+                                scope.launch {
+                                    haptic()
+                                    val previous = snapshot.todos
+                                    snapshot = snapshot.copy(
+                                        todos = snapshot.todos.filter { it.id != item.id },
+                                    )
+                                    val undo = snackbar.showSnackbar(
+                                        message = "Removed",
+                                        actionLabel = "Undo",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                    if (undo == SnackbarResult.ActionPerformed) {
+                                        snapshot = snapshot.copy(todos = previous)
+                                        return@launch
+                                    }
+                                    hostCall(null) {
+                                        client.deleteTodo(
+                                            settings.baseUrl,
+                                            settings.identity,
+                                            item.id,
+                                        )
+                                    }
+                                }
+                            },
+                            onShareList = {
+                                scope.launch {
+                                    val base = settings.baseUrl
+                                    if (base.isBlank()) {
+                                        error = "Set a host URL in Settings."
+                                        return@launch
+                                    }
+                                    val text = withContext(Dispatchers.IO) {
+                                        client.todoPlainText(base, settings.identity)
+                                    }
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, text)
+                                    }
+                                    context.startActivity(Intent.createChooser(send, "Share list"))
+                                }
+                            },
+                            onOpenDashboard = { item ->
+                                HostLinks.todoDashboardUrl(hostHealth, item)?.let { openUrl(context, it) }
+                                    ?: scope.launch { snackbar.showSnackbar("No dashboard link for this item") }
+                            },
+                        )
+                    }
+                } else when (currentTab) {
                     PocketTab.CLIP -> ClipPane(
                         latest = snapshot.latest,
                         history = snapshot.history,
@@ -511,6 +689,13 @@ fun PocketApp(
                                 ?: scope.launch { snackbar.showSnackbar("No dashboard link for this clip") }
                         },
                         showDashboardLinks = caps.dashboard,
+                        pinnedClipKeys = pinnedClipKeys,
+                        onTogglePin = { entry ->
+                            scope.launch {
+                                pinStore.toggleClip(entry)
+                                haptic()
+                            }
+                        },
                         onSend = { text ->
                             scope.launch {
                                 sendWithOutbox(
@@ -531,6 +716,18 @@ fun PocketApp(
                         shareListEnabled = caps.todoText,
                         deleteEnabled = caps.todoDelete,
                         showDashboardLinks = caps.dashboard,
+                        sortMode = settings.listSortMode,
+                        personFilter = settings.listPersonFilter,
+                        identity = settings.identity,
+                        pinnedTodoIds = pinnedTodoIds,
+                        onSortChange = { scope.launch { store.setListSortMode(it) } },
+                        onPersonFilterChange = { scope.launch { store.setListPersonFilter(it) } },
+                        onTogglePin = { id ->
+                            scope.launch {
+                                pinStore.toggleTodo(id)
+                                haptic()
+                            }
+                        },
                         isRefreshing = pullRefreshing,
                         onRefresh = { scope.launch { pullRefresh() } },
                         onAdd = { text ->
@@ -806,6 +1003,7 @@ private fun rememberResumeTick(): Int {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ClipPane(
+    modifier: Modifier = Modifier,
     latest: ClipEntry?,
     history: List<ClipEntry>,
     filter: String,
@@ -818,22 +1016,27 @@ private fun ClipPane(
     onOpenUrl: (String) -> Unit,
     onOpenDashboard: (ClipEntry) -> Unit,
     showDashboardLinks: Boolean,
+    pinnedClipKeys: Set<String>,
+    onTogglePin: (ClipEntry) -> Unit,
     onSend: (String) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
     var search by rememberSaveable { mutableStateOf("") }
     fun matchesSearch(entry: ClipEntry): Boolean =
         search.isBlank() || entry.text.contains(search, ignoreCase = true)
-    val filteredHistory = history.filter { entry ->
-        (filter == "All" || entry.from.equals(filter, ignoreCase = true)) && matchesSearch(entry)
-    }.let { list ->
+    val sortedHistory = sortClipHistory(
+        history.filter { entry ->
+            (filter == "All" || entry.from.equals(filter, ignoreCase = true)) && matchesSearch(entry)
+        },
+        pinnedClipKeys,
+    ).let { list ->
         if (latest == null) list
         else list.filter { it.id != latest.id || it.text != latest.text }
     }
     val showLatest = latest != null &&
         (filter == "All" || latest.from.equals(filter, ignoreCase = true)) &&
         matchesSearch(latest)
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = modifier.fillMaxSize()) {
         OutlinedTextField(
             value = search,
             onValueChange = { search = it },
@@ -855,7 +1058,7 @@ private fun ClipPane(
                     label = { Text(name) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Color(0xFF0E3A43),
-                        selectedLabelColor = EdcCyan,
+                        selectedLabelColor = EdcAccent,
                     ),
                 )
             }
@@ -874,32 +1077,53 @@ private fun ClipPane(
                 SectionLabel("Latest")
                 Spacer(Modifier.height(8.dp))
                 if (!showLatest) {
-                    EmptyHint(
-                        if (search.isNotBlank()) "No clips match \"$search\"."
-                        else "Nothing on the house clipboard.",
-                    )
+                    EmptyHint(clipEmptyMessage(search, filter))
                 } else {
-                    ClipCard(
-                        entry = latest!!,
-                        featured = true,
-                        onCopy = onCopy,
-                        onShare = onShare,
-                        onOpenUrl = onOpenUrl,
-                        onOpenDashboard = if (showDashboardLinks) onOpenDashboard else null,
-                    )
+                    SwipeClipRow(
+                        onCopy = { onCopy(latest!!.text) },
+                        onShare = { onShare(latest!!.text) },
+                        onDashboard = if (showDashboardLinks) {
+                            { onOpenDashboard(latest!!) }
+                        } else {
+                            null
+                        },
+                    ) {
+                        ClipCard(
+                            entry = latest!!,
+                            featured = true,
+                            isPinned = PinStore.clipKey(latest!!) in pinnedClipKeys,
+                            onTogglePin = { onTogglePin(latest!!) },
+                            onCopy = onCopy,
+                            onShare = onShare,
+                            onOpenUrl = onOpenUrl,
+                            onOpenDashboard = if (showDashboardLinks) onOpenDashboard else null,
+                        )
+                    }
                 }
             }
-            if (filteredHistory.isNotEmpty()) {
+            if (sortedHistory.isNotEmpty()) {
                 item { SectionLabel("History") }
-                items(filteredHistory, key = { it.id + it.ts }) { entry ->
-                    ClipCard(
-                        entry = entry,
-                        featured = false,
-                        onCopy = onCopy,
-                        onShare = onShare,
-                        onOpenUrl = onOpenUrl,
-                        onOpenDashboard = if (showDashboardLinks) onOpenDashboard else null,
-                    )
+                items(sortedHistory, key = { it.id + it.ts }) { entry ->
+                    SwipeClipRow(
+                        onCopy = { onCopy(entry.text) },
+                        onShare = { onShare(entry.text) },
+                        onDashboard = if (showDashboardLinks) {
+                            { onOpenDashboard(entry) }
+                        } else {
+                            null
+                        },
+                    ) {
+                        ClipCard(
+                            entry = entry,
+                            featured = false,
+                            isPinned = PinStore.clipKey(entry) in pinnedClipKeys,
+                            onTogglePin = { onTogglePin(entry) },
+                            onCopy = onCopy,
+                            onShare = onShare,
+                            onOpenUrl = onOpenUrl,
+                            onOpenDashboard = if (showDashboardLinks) onOpenDashboard else null,
+                        )
+                    }
                 }
             }
         }
@@ -928,14 +1152,22 @@ private fun ClipPane(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun ListPane(
+    modifier: Modifier = Modifier,
     todos: List<TodoItem>,
     listEnabled: Boolean,
     shareListEnabled: Boolean,
     deleteEnabled: Boolean,
     showDashboardLinks: Boolean,
+    sortMode: ListSortMode,
+    personFilter: ListPersonFilter,
+    identity: String,
+    pinnedTodoIds: Set<String>,
+    onSortChange: (ListSortMode) -> Unit,
+    onPersonFilterChange: (ListPersonFilter) -> Unit,
+    onTogglePin: (String) -> Unit,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onAdd: (String) -> Unit,
@@ -945,9 +1177,11 @@ private fun ListPane(
     onOpenDashboard: (TodoItem) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
-    val open = todos.filter { !it.done }
-    val done = todos.filter { it.done }
-    Column(modifier = Modifier.fillMaxSize()) {
+    val filtered = filterTodosByPerson(todos, personFilter, identity)
+    val sorted = sortTodos(filtered, sortMode, pinnedTodoIds, identity)
+    val open = sorted.filter { !it.done }
+    val done = sorted.filter { it.done }
+    Column(modifier = modifier.fillMaxSize()) {
         if (listEnabled) {
             SendField(
                 value = draft,
@@ -979,6 +1213,38 @@ private fun ListPane(
                 Text("Copy / share list")
             }
         }
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ListSortMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = sortMode == mode,
+                    onClick = { onSortChange(mode) },
+                    label = { Text(mode.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ListPersonFilter.entries.forEach { mode ->
+                FilterChip(
+                    selected = personFilter == mode,
+                    onClick = { onPersonFilterChange(mode) },
+                    label = { Text(if (mode == ListPersonFilter.MINE) identity else mode.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = onRefresh,
@@ -990,18 +1256,25 @@ private fun ListPane(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
             if (todos.isEmpty()) {
-                item { EmptyHint("List is empty.") }
+                item { EmptyHint(listEmptyMessage(personFilter, identity)) }
             }
             items(open, key = { it.id }) { item ->
-                TodoRow(
-                    item = item,
-                    onToggle = onToggle,
-                    onOpenDashboard = if (showDashboardLinks) {
-                        { onOpenDashboard(item) }
-                    } else {
-                        null
-                    },
-                )
+                SwipeTodoRow(
+                    enabled = listEnabled,
+                    onComplete = { onToggle(item) },
+                ) {
+                    TodoRow(
+                        item = item,
+                        isPinned = item.id in pinnedTodoIds,
+                        onToggle = onToggle,
+                        onTogglePin = { onTogglePin(item.id) },
+                        onOpenDashboard = if (showDashboardLinks) {
+                            { onOpenDashboard(item) }
+                        } else {
+                            null
+                        },
+                    )
+                }
             }
             if (done.isNotEmpty()) {
                 item {
@@ -1011,7 +1284,9 @@ private fun ListPane(
                 items(done, key = { it.id }) { item ->
                     TodoRow(
                         item = item,
+                        isPinned = item.id in pinnedTodoIds,
                         onToggle = onToggle,
+                        onTogglePin = { onTogglePin(item.id) },
                         onDelete = if (deleteEnabled) onDelete else null,
                         onOpenDashboard = if (showDashboardLinks) {
                             { onOpenDashboard(item) }
@@ -1175,7 +1450,7 @@ private fun SendPane(
         if (incomingEnabled) {
             SectionLabel("Incoming")
             if (drops.isEmpty()) {
-                EmptyHint("No incoming files yet.")
+                EmptyHint(incomingEmptyMessage())
             } else {
                 drops.forEach { drop ->
                     DropCard(
@@ -1280,7 +1555,7 @@ private fun SettingsPane(
                     label = { Text(name) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Color(0xFF0E3A43),
-                        selectedLabelColor = EdcCyan,
+                        selectedLabelColor = EdcAccent,
                     ),
                 )
             }
@@ -1294,7 +1569,7 @@ private fun SettingsPane(
                     label = { Text(preset.label) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Color(0xFF0E3A43),
-                        selectedLabelColor = EdcCyan,
+                        selectedLabelColor = EdcAccent,
                     ),
                 )
             }
@@ -1358,7 +1633,7 @@ private fun SettingsPane(
                     label = { Text(mode.label) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = Color(0xFF0E3A43),
-                        selectedLabelColor = EdcCyan,
+                        selectedLabelColor = EdcAccent,
                     ),
                 )
             }
@@ -1442,26 +1717,34 @@ private fun SettingsPane(
 private fun ClipCard(
     entry: ClipEntry,
     featured: Boolean,
+    isPinned: Boolean,
+    onTogglePin: () -> Unit,
     onCopy: (String) -> Unit,
     onShare: (String) -> Unit,
     onOpenUrl: (String) -> Unit,
     onOpenDashboard: ((ClipEntry) -> Unit)? = null,
 ) {
+    val context = LocalContext.current
     var expanded by rememberSaveable(entry.id + entry.ts) { mutableStateOf(false) }
     val long = entry.text.length > clipPreviewChars
     val shown = if (expanded || !long) entry.text else entry.text.take(clipPreviewChars) + "…"
     val directUrl = firstUrl(entry.text)
+    val phone = firstPhone(entry.text)
+    val address = firstAddress(entry.text)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (featured) EdcSurfaceHi else EdcSurface,
         ),
         shape = RoundedCornerShape(12.dp),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             LinkifiedText(
                 text = shown,
                 color = EdcInk,
+                linkColor = EdcAccent,
                 onOpenUrl = onOpenUrl,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1472,11 +1755,37 @@ private fun ClipCard(
                     Text(if (expanded) "Show less" else "Show more")
                 }
             }
-            if (directUrl != null && !entry.text.trim().equals(directUrl, ignoreCase = true)) {
-                TextButton(onClick = { onOpenUrl(directUrl) }) { Text("Open link") }
+            directUrl?.let { url ->
+                Text(
+                    text = linkPreviewLabel(url),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = EdcMuted,
+                )
             }
-            if (onOpenDashboard != null) {
-                TextButton(onClick = { onOpenDashboard(entry) }) { Text("On dashboard") }
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (directUrl != null && !entry.text.trim().equals(directUrl, ignoreCase = true)) {
+                    TextButton(onClick = { onOpenUrl(directUrl) }) { Text("Open link") }
+                }
+                phone?.let { number ->
+                    TextButton(onClick = { dialPhone(context, number) }) {
+                        Icon(Icons.Outlined.Phone, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Call")
+                    }
+                }
+                address?.let { line ->
+                    TextButton(onClick = { openMaps(context, line) }) {
+                        Icon(Icons.Outlined.Place, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Map")
+                    }
+                }
+                if (onOpenDashboard != null) {
+                    TextButton(onClick = { onOpenDashboard(entry) }) { Text("Dashboard") }
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1490,6 +1799,13 @@ private fun ClipCard(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                IconButton(onClick = onTogglePin) {
+                    Icon(
+                        if (isPinned) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                        contentDescription = if (isPinned) "Unpin" else "Pin",
+                        tint = if (isPinned) EdcAccent else EdcMuted,
+                    )
+                }
                 IconButton(onClick = { onShare(entry.text) }) {
                     Icon(Icons.Outlined.Share, contentDescription = "Share")
                 }
@@ -1504,7 +1820,9 @@ private fun ClipCard(
 @Composable
 private fun TodoRow(
     item: TodoItem,
+    isPinned: Boolean,
     onToggle: (TodoItem) -> Unit,
+    onTogglePin: () -> Unit,
     onDelete: ((TodoItem) -> Unit)? = null,
     onOpenDashboard: (() -> Unit)? = null,
 ) {
@@ -1526,6 +1844,13 @@ private fun TodoRow(
             if (meta.isNotBlank()) {
                 Text(meta, style = MaterialTheme.typography.labelSmall, color = EdcMuted)
             }
+        }
+        IconButton(onClick = onTogglePin) {
+            Icon(
+                if (isPinned) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                contentDescription = if (isPinned) "Unpin" else "Pin",
+                tint = if (isPinned) EdcAccent else EdcMuted,
+            )
         }
         if (onOpenDashboard != null) {
             TextButton(onClick = onOpenDashboard) { Text("Dashboard") }
@@ -1582,7 +1907,7 @@ private fun SectionLabel(text: String) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
-        color = EdcCyan,
+        color = EdcAccent,
         fontWeight = FontWeight.SemiBold,
     )
 }

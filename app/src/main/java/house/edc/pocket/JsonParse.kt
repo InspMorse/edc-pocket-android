@@ -101,6 +101,7 @@ internal fun parseHealth(raw: String): HostHealth {
                 root.str("dashboard_url", "url")
             },
         ),
+        themeAccent = parseThemeAccentFromJson(root),
     )
     val active = root.optJSONObject("active_host")
     if (active != null && health.hostName.isBlank()) {

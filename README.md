@@ -45,8 +45,9 @@ CI runs on every push/PR — see [`.github/workflows/ci.yml`](.github/workflows/
 - **v0.5** — Incoming thumbnails, multi-photo, share session, clip search, undo delete
 - **v0.6** — host capability discovery, graceful UI degradation, identity sync, dashboard deep links, optional HTTPS
 - **v1.0** — integration tests, Compose smoke test, CI, release build, changelog ([CHANGELOG.md](CHANGELOG.md))
+- **v1.1** — onboarding, swipe actions, pins, list sort, rich clips, host theme accent, tablet layout
 
-See **[ROADMAP.md](ROADMAP.md)** — **v1.0** shipped (Phase 6); Phases **7–12** remain toward **2.0**.
+See **[ROADMAP.md](ROADMAP.md)** — **v1.1** shipped (Phase 7); Phases **8–12** remain toward **2.0**.
 
 Client only. Never hosts.
 

@@ -32,10 +32,10 @@ Mike and Mhairi can read and write the **house clipboard**, manage the shared **
 
 | | |
 |---|---|
-| **Current release** | **v1.0** (Phase 6) |
-| **Shipped** | Phases **0–6** — foundation through trust & release |
-| **Next milestone** | Phase **7** → **1.1** |
-| **Through Phase 12** | **59** remaining items (7.1–12.10) |
+| **Current release** | **v1.1** (Phase 7) |
+| **Shipped** | Phases **0–7** — foundation through everyday delight |
+| **Next milestone** | Phase **8** → **1.3** |
+| **Through Phase 12** | **49** remaining items (8.1–12.10) |
 | **Carried forward** | 5.6 FCM push → **8.3** (needs host API) |
 
 **Branch:** `cursor/finish-edc-pocket-android-f18a` · **PR:** [#2](https://github.com/InspMorse/edc-pocket-android/pull/2)
@@ -49,14 +49,14 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 | Phase | Target version | Goal | Items | Status |
 |-------|----------------|------|-------|--------|
 | **6** | **1.0** | Quality, trust & release | 6.1–6.8 | **Done** |
-| **7** | 1.1–1.2 | Everyday delight | 7.1–7.10 | **Next** |
-| **8** | 1.3–1.4 | Always in sync | 8.1–8.9 (+ 5.6) | Planned |
+| **7** | 1.1–1.2 | Everyday delight | 7.1–7.10 | **Done** |
+| **8** | 1.3–1.4 | Always in sync | 8.1–8.9 (+ 5.6) | **Next** |
 | **9** | 1.5–1.6 | More surfaces | 9.1–9.10 | Planned |
 | **10** | 1.7–1.8 | Smarter house | 10.1–10.10 | Planned |
 | **11** | 1.9–2.0 | Beyond clipboard | 11.1–11.10 | Planned |
 | **12** | 2.x | Trust at scale | 12.1–12.10 | Planned |
 
-**Spine:** `Phase 7 (1.1) → 8 → 9 → 10 → 11 → 12 (2.0)`
+**Spine:** `Phase 8 (1.3) → 9 → 10 → 11 → 12 (2.0)`
 
 **Host-dependent batches** (coordinate Everyday Clipboard host repo):
 
@@ -178,28 +178,28 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 
 ---
 
-## Phase 7 — Everyday delight (**next** → 1.1–1.2)
+## Phase 7 — Everyday delight (done → **1.1**)
 
 **Goal:** First-run and daily use feel obvious, fast, and pleasant — not just functional.
 
 | # | Item | Status |
 |---|------|--------|
-| 7.1 | First-run onboarding (identity → host → test → optional widget/tile) | Pending |
-| 7.2 | Swipe actions on clip rows (copy / share / dashboard) | Pending |
-| 7.3 | Swipe-to-complete on open todos | Pending |
-| 7.4 | Rich clip previews — link unfurl, phone → dial, address → maps | Pending |
-| 7.5 | Pin / star clips and list items (local or host-backed if API exists) | Pending |
-| 7.6 | List sorting & filters (open first, by person, by date) | Pending |
-| 7.7 | Better empty states and error copy (“host asleep”, “Tailscale off”) | Pending |
-| 7.8 | Material You / host accent colour sync (if host exposes theme) | Pending |
-| 7.9 | Tablet & foldable two-pane layout (clip + list side by side) | Pending |
-| 7.10 | Haptic & animation polish pass | Pending |
+| 7.1 | First-run onboarding (identity → host → test → optional widget/tile) | Done |
+| 7.2 | Swipe actions on clip rows (copy / share / dashboard) | Done |
+| 7.3 | Swipe-to-complete on open todos | Done |
+| 7.4 | Rich clip previews — link unfurl, phone → dial, address → maps | Done |
+| 7.5 | Pin / star clips and list items (local or host-backed if API exists) | Done |
+| 7.6 | List sorting & filters (open first, by person, by date) | Done |
+| 7.7 | Better empty states and error copy (“host asleep”, “Tailscale off”) | Done |
+| 7.8 | Material You / host accent colour sync (if host exposes theme) | Done |
+| 7.9 | Tablet & foldable two-pane layout (clip + list side by side) | Done |
+| 7.10 | Haptic & animation polish pass | Done |
 
 **Exit criteria:** A new phone owner reaches “copy latest clip” in under 60 seconds without reading docs.
 
 ---
 
-## Phase 8 — Always in sync (1.3–1.4)
+## Phase 8 — Always in sync (**next** → 1.3–1.4)
 
 **Goal:** Data feels live; outages are invisible; bandwidth stays low.
 
@@ -334,9 +334,9 @@ Nothing off the table — park here until a host API or strong user pull exists.
 | **0.4** | Phase 3 | Shipped |
 | **0.5** | Phase 4 | Shipped |
 | **0.6** | Phase 5 | Shipped |
-| **1.0** | Phase 6 | **Current** |
-| **1.1–1.2** | Phase 7 | **Next** |
-| **1.3–1.4** | Phase 8 | Planned |
+| **1.0** | Phase 6 | Shipped |
+| **1.1** | Phase 7 | **Current** |
+| **1.3–1.4** | Phase 8 | **Next** |
 | **1.5–1.6** | Phase 9 | Planned |
 | **1.7–1.8** | Phase 10 | Planned |
 | **1.9–2.0** | Phase 11 | Planned |
@@ -344,12 +344,10 @@ Nothing off the table — park here until a host API or strong user pull exists.
 
 Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 
-### Full remaining checklist (7.1 → 12.10)
+### Full remaining checklist (8.1 → 12.10)
 
 <details>
-<summary>59 items — expand to scan</summary>
-
-**Phase 7:** 7.1 onboarding · 7.2 clip swipes · 7.3 swipe complete · 7.4 rich previews · 7.5 pin/star · 7.6 list sort/filter · 7.7 error copy · 7.8 theme sync · 7.9 tablet layout · 7.10 animation polish  
+<summary>49 items — expand to scan</summary>
 
 **Phase 8:** 8.1 Room cache · 8.2 conditional fetch · 8.3 FCM · 8.4 SSE/WS · 8.5 adaptive sync · 8.6 outbox v2 · 8.7 conflict hints · 8.8 connection doctor · 8.9 staleness UI  
 
@@ -399,10 +397,10 @@ Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 **Sequential spine (required order for major releases)**
 
 ```
-v1.0 (now) → Phase 7 (1.1) → 8 → 9 → 10 → 11 → 12 (2.0)
+v1.1 (now) → Phase 8 (1.3) → 9 → 10 → 11 → 12 (2.0)
 ```
 
-**Parallel tracks** — can overlap now that **1.0** shipped:
+**Parallel tracks** — can overlap now that **1.1** shipped:
 
 | Track | Phases | Focus |
 |-------|--------|--------|
@@ -412,7 +410,7 @@ v1.0 (now) → Phase 7 (1.1) → 8 → 9 → 10 → 11 → 12 (2.0)
 | **Surfaces** | 9 | Widget, tile, voice, Wear, NFC |
 | **House** | 10 | Multi-host, discovery, dashboard |
 
-**Recommended batches (Phase 7 first)**
+**Recommended batches (Phase 8 first)**
 
 | Batch | Items | Why |
 |-------|-------|-----|

@@ -16,12 +16,3 @@ internal fun validateHostUrl(raw: String): String? {
     if (port != -1 && port !in 1..65535) return "Invalid port"
     return null
 }
-
-internal fun hostFailureMessage(settings: EdcSettings, cause: String?): String {
-    val base = cause?.takeIf { it.isNotBlank() } ?: "Host unreachable"
-    return if (settings.preset == HostPreset.TAILSCALE) {
-        "$base · Is Tailscale connected?"
-    } else {
-        base
-    }
-}

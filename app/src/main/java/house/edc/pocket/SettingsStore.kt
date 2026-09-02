@@ -24,6 +24,9 @@ data class EdcSettings(
     val autoHost: Boolean = true,
     val backgroundPoll: BackgroundPollMode = BackgroundPollMode.OFF,
     val useHttps: Boolean = false,
+    val onboardingComplete: Boolean = true,
+    val listSortMode: ListSortMode = ListSortMode.OPEN_FIRST,
+    val listPersonFilter: ListPersonFilter = ListPersonFilter.ALL,
 ) {
     val baseUrl: String
         get() {
@@ -43,8 +46,12 @@ class SettingsStore(private val context: Context) {
     private val autoHostKey = booleanPreferencesKey("auto_host")
     private val backgroundPollKey = stringPreferencesKey("background_poll")
     private val useHttpsKey = booleanPreferencesKey("use_https")
+    private val onboardingKey = booleanPreferencesKey("onboarding_complete")
+    private val listSortKey = stringPreferencesKey("list_sort")
+    private val listPersonFilterKey = stringPreferencesKey("list_person_filter")
 
     val settings: Flow<EdcSettings> = context.dataStore.data.map { prefs ->
+        val legacyInstall = prefs.asMap().keys.any { it != onboardingKey }
         EdcSettings(
             identity = prefs[identityKey] ?: "Mike",
             preset = runCatching { HostPreset.valueOf(prefs[presetKey] ?: "LAN") }
@@ -56,6 +63,13 @@ class SettingsStore(private val context: Context) {
                 BackgroundPollMode.valueOf(prefs[backgroundPollKey] ?: "OFF")
             }.getOrDefault(BackgroundPollMode.OFF),
             useHttps = prefs[useHttpsKey] ?: false,
+            onboardingComplete = prefs[onboardingKey] ?: legacyInstall,
+            listSortMode = runCatching {
+                ListSortMode.valueOf(prefs[listSortKey] ?: "OPEN_FIRST")
+            }.getOrDefault(ListSortMode.OPEN_FIRST),
+            listPersonFilter = runCatching {
+                ListPersonFilter.valueOf(prefs[listPersonFilterKey] ?: "ALL")
+            }.getOrDefault(ListPersonFilter.ALL),
         )
     }
 
@@ -89,5 +103,17 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setUseHttps(value: Boolean) {
         context.dataStore.edit { it[useHttpsKey] = value }
+    }
+
+    suspend fun completeOnboarding() {
+        context.dataStore.edit { it[onboardingKey] = true }
+    }
+
+    suspend fun setListSortMode(value: ListSortMode) {
+        context.dataStore.edit { it[listSortKey] = value.name }
+    }
+
+    suspend fun setListPersonFilter(value: ListPersonFilter) {
+        context.dataStore.edit { it[listPersonFilterKey] = value.name }
     }
 }

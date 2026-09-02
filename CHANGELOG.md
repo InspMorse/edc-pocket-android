@@ -7,6 +7,22 @@ Versioning: **0.x** = pre-release phases · **1.0** = Phase 6 trust release · *
 
 ---
 
+## [1.1.0] — Phase 7
+
+### Added
+
+- First-run onboarding wizard (identity, host, connection test, widget/tile tips)
+- Swipe clip rows for copy / share / dashboard; swipe todos to complete
+- Rich clip actions — link domain preview, call phone numbers, open addresses in Maps
+- Pin / star clips and list items (stored locally)
+- List sort modes and person filter
+- Clearer offline and host error messages
+- Host accent colour from health/capabilities JSON
+- Tablet two-pane layout (clip + list side by side on wide screens)
+- Animated clip expand and haptic feedback on pin/swipe/onboarding
+
+---
+
 ## [1.0.0] — Phase 6
 
 ### Added
