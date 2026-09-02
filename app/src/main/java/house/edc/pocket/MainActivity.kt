@@ -1,6 +1,5 @@
 package house.edc.pocket
 
-import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -17,7 +16,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         launchActionState.value = intent.launchAction()
         val store = SettingsStore(this)
+        val outboxStore = OutboxStore(this)
         val client = EdcClient(contentResolver)
+        val outboxProcessor = OutboxProcessor(client, outboxStore)
+        val hostConnector = HostConnector(client)
+        val networkMonitor = NetworkMonitor(this)
         setContent {
             val settings by store.settings.collectAsState(initial = EdcSettings())
             val launchAction by launchActionState
@@ -25,13 +28,17 @@ class MainActivity : ComponentActivity() {
                 settings = settings,
                 store = store,
                 client = client,
+                outboxStore = outboxStore,
+                outboxProcessor = outboxProcessor,
+                hostConnector = hostConnector,
+                networkMonitor = networkMonitor,
                 launchAction = launchAction,
                 onLaunchActionHandled = { launchActionState.value = LaunchAction.NONE },
             )
         }
     }
 
-    override fun onNewIntent(intent: Intent) {
+    override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         launchActionState.value = intent.launchAction()

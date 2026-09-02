@@ -65,9 +65,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -113,7 +115,8 @@ private enum class PocketTab(val label: String) {
 
 private val identities = listOf("Mike", "Mhairi")
 private val clipFilters = listOf("All", "Mike", "Mhairi", "EDC")
-private const val pollMs = 5_000L
+private const val pollMsActive = 5_000L
+private const val pollMsIdle = 15_000L
 private const val clipPreviewChars = 220
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -122,6 +125,10 @@ fun PocketApp(
     settings: EdcSettings,
     store: SettingsStore,
     client: EdcClient,
+    outboxStore: OutboxStore,
+    outboxProcessor: OutboxProcessor,
+    hostConnector: HostConnector,
+    networkMonitor: NetworkMonitor,
     launchAction: LaunchAction = LaunchAction.NONE,
     onLaunchActionHandled: () -> Unit = {},
 ) {
@@ -130,6 +137,8 @@ fun PocketApp(
         val scope = rememberCoroutineScope()
         val snackbar = remember { SnackbarHostState() }
         val haptic = rememberEdcHaptic()
+        val networkKind by networkMonitor.networkKind.collectAsState(initial = NetworkKind.OTHER)
+        val outboxItems by outboxStore.items.collectAsState(initial = emptyList())
         var tab by rememberSaveable { mutableStateOf(PocketTab.CLIP.name) }
         val currentTab = PocketTab.entries.find { it.name == tab } ?: PocketTab.CLIP
         var snapshot by remember { mutableStateOf(HostSnapshot()) }
@@ -139,6 +148,7 @@ fun PocketApp(
         var stale by remember { mutableStateOf(false) }
         var hostHealth by remember { mutableStateOf<HostHealth?>(null) }
         var pullRefreshing by remember { mutableStateOf(false) }
+        var urlValidationError by remember { mutableStateOf<String?>(null) }
         val resumeTick = rememberResumeTick()
 
         suspend fun refresh(silent: Boolean = false) {
@@ -163,12 +173,52 @@ fun PocketApp(
                     status = connectionLabel(settings, stale = false, error = null)
                 },
                 onFailure = {
-                    error = it.message ?: "Host unreachable"
+                    error = hostFailureMessage(settings, it.message)
                     status = null
                     stale = snapshot.latest != null ||
                         snapshot.history.isNotEmpty() ||
                         snapshot.todos.isNotEmpty() ||
                         snapshot.drops.isNotEmpty()
+                },
+            )
+        }
+
+        suspend fun flushOutbox(notify: Boolean = true): Int {
+            val sent = withContext(Dispatchers.IO) { outboxProcessor.flush(settings) }
+            if (sent > 0) {
+                refresh(silent = true)
+                if (notify) {
+                    val msg = if (sent == 1) "Sent queued item" else "Sent $sent queued items"
+                    snackbar.showSnackbar(msg)
+                }
+            }
+            return sent
+        }
+
+        suspend fun sendWithOutbox(
+            okMessage: String?,
+            enqueueItem: suspend () -> OutboxItem,
+            send: suspend () -> Unit,
+        ) {
+            val base = settings.baseUrl
+            if (base.isBlank()) {
+                error = "Set a host URL in Settings."
+                return
+            }
+            loading = true
+            val result = withContext(Dispatchers.IO) { runCatching { send() } }
+            loading = false
+            result.fold(
+                onSuccess = {
+                    error = null
+                    haptic()
+                    if (okMessage != null) snackbar.showSnackbar(okMessage)
+                    refresh()
+                },
+                onFailure = {
+                    withContext(Dispatchers.IO) { outboxStore.enqueue(enqueueItem()) }
+                    error = null
+                    snackbar.showSnackbar("Queued — will send when host is back")
                 },
             )
         }
@@ -189,7 +239,7 @@ fun PocketApp(
                     refresh()
                 },
                 onFailure = {
-                    error = it.message ?: "Request failed"
+                    error = hostFailureMessage(settings, it.message)
                 },
             )
         }
@@ -197,16 +247,38 @@ fun PocketApp(
         suspend fun pullRefresh() {
             pullRefreshing = true
             refresh(silent = true)
+            flushOutbox(notify = false)
             pullRefreshing = false
         }
 
         LaunchedEffect(settings.baseUrl, settings.identity, resumeTick) {
             refresh()
+            flushOutbox()
         }
 
-        LaunchedEffect(settings.baseUrl, settings.identity) {
+        LaunchedEffect(networkKind, settings.autoHost, settings.preset, settings.identity) {
+            if (networkKind == NetworkKind.NONE) return@LaunchedEffect
+            val found = withContext(Dispatchers.IO) {
+                hostConnector.syncHost(settings, store, networkKind)
+            }
+            if (found != null) {
+                hostHealth = found.health
+                error = null
+                refresh(silent = true)
+            } else if (settings.baseUrl.isNotBlank()) {
+                val health = withContext(Dispatchers.IO) { hostConnector.reprobe(settings) }
+                if (health != null) hostHealth = health
+            }
+            flushOutbox()
+        }
+
+        LaunchedEffect(currentTab, settings.baseUrl, settings.identity) {
             while (isActive) {
-                delay(pollMs)
+                val delayMs = when (currentTab) {
+                    PocketTab.CLIP, PocketTab.LIST -> pollMsActive
+                    else -> pollMsIdle
+                }
+                delay(delayMs)
                 refresh(silent = true)
             }
         }
@@ -328,7 +400,9 @@ fun PocketApp(
                 }
                 val banner = when {
                     stale && error != null -> "$error · showing last known"
-                    else -> error ?: status
+                    error != null -> error
+                    outboxItems.isNotEmpty() -> "${outboxItems.size} send(s) queued"
+                    else -> status
                 }
                 if (banner != null) {
                     Text(
@@ -366,10 +440,15 @@ fun PocketApp(
                         onOpenUrl = { openUrl(context, it) },
                         onSend = { text ->
                             scope.launch {
-                                hostCall("Sent to clipboard") {
-                                    client.sendText(settings.baseUrl, settings.identity, text)
-                                }
-                                haptic()
+                                sendWithOutbox(
+                                    okMessage = "Sent to clipboard",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.CLIP, text = text)
+                                    },
+                                    send = {
+                                        client.sendText(settings.baseUrl, settings.identity, text)
+                                    },
+                                )
                             }
                         },
                     )
@@ -379,10 +458,15 @@ fun PocketApp(
                         onRefresh = { scope.launch { pullRefresh() } },
                         onAdd = { text ->
                             scope.launch {
-                                hostCall("Added to list") {
-                                    client.addTodo(settings.baseUrl, settings.identity, text)
-                                }
-                                haptic()
+                                sendWithOutbox(
+                                    okMessage = "Added to list",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.LIST, text = text)
+                                    },
+                                    send = {
+                                        client.addTodo(settings.baseUrl, settings.identity, text)
+                                    },
+                                )
                             }
                         },
                         onToggle = { item ->
@@ -437,29 +521,52 @@ fun PocketApp(
                         drops = snapshot.drops,
                         onSendClip = { text ->
                             scope.launch {
-                                hostCall("Sent to clipboard") {
-                                    client.sendText(settings.baseUrl, settings.identity, text)
-                                }
+                                sendWithOutbox(
+                                    okMessage = "Sent to clipboard",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.CLIP, text = text)
+                                    },
+                                    send = {
+                                        client.sendText(settings.baseUrl, settings.identity, text)
+                                    },
+                                )
                             }
                         },
                         onSendList = { text ->
                             scope.launch {
-                                hostCall("Added to list") {
-                                    client.addTodo(settings.baseUrl, settings.identity, text)
-                                }
+                                sendWithOutbox(
+                                    okMessage = "Added to list",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.LIST, text = text)
+                                    },
+                                    send = {
+                                        client.addTodo(settings.baseUrl, settings.identity, text)
+                                    },
+                                )
                             }
                         },
                         onUpload = { uri, name, session ->
                             scope.launch {
-                                hostCall("Photo sent to Incoming") {
-                                    client.uploadImage(
-                                        settings.baseUrl,
-                                        settings.identity,
-                                        uri,
-                                        name,
-                                        session,
-                                    )
-                                }
+                                sendWithOutbox(
+                                    okMessage = "Photo sent to Incoming",
+                                    enqueueItem = {
+                                        outboxStore.enqueuePhoto(
+                                            context.contentResolver,
+                                            uri,
+                                            name,
+                                            session,
+                                        )
+                                    },
+                                    send = {
+                                        client.uploadImage(
+                                            settings.baseUrl,
+                                            settings.identity,
+                                            uri,
+                                            name,
+                                            session,
+                                        )
+                                    },
+                                )
                             }
                         },
                         onOpenDrop = { drop ->
@@ -473,7 +580,6 @@ fun PocketApp(
                         settings = settings,
                         onIdentity = { scope.launch { store.setIdentity(it) } },
                         onPreset = { scope.launch { store.setPreset(it) } },
-                        onCustomUrl = { scope.launch { store.setCustomUrl(it) } },
                         onProbe = {
                             scope.launch {
                                 val base = settings.baseUrl
@@ -494,7 +600,7 @@ fun PocketApp(
                                         snackbar.showSnackbar(it.summary())
                                     },
                                     onFailure = {
-                                        error = it.message ?: "Host unreachable"
+                                        error = hostFailureMessage(settings, it.message)
                                     },
                                 )
                             }
@@ -519,6 +625,21 @@ fun PocketApp(
                             }
                         },
                         hostHealth = hostHealth,
+                        outboxItems = outboxItems,
+                        autoHost = settings.autoHost,
+                        onAutoHost = { scope.launch { store.setAutoHost(it) } },
+                        urlValidationError = urlValidationError,
+                        onCustomUrl = { raw ->
+                            val err = validateHostUrl(raw)
+                            if (err != null) {
+                                urlValidationError = err
+                            } else {
+                                urlValidationError = null
+                                scope.launch { store.setCustomUrl(raw) }
+                            }
+                        },
+                        onFlushOutbox = { scope.launch { flushOutbox() } },
+                        onClearOutbox = { scope.launch { outboxStore.clear() } },
                         onOpenDashboard = {
                             val url = hostHealth?.dashboardUrl?.takeIf { it.isNotBlank() }
                             if (url != null) openUrl(context, url) else scope.launch {
@@ -841,11 +962,17 @@ private fun SendPane(
 private fun SettingsPane(
     settings: EdcSettings,
     hostHealth: HostHealth?,
+    outboxItems: List<OutboxItem>,
+    autoHost: Boolean,
     onIdentity: (String) -> Unit,
     onPreset: (HostPreset) -> Unit,
+    urlValidationError: String?,
     onCustomUrl: (String) -> Unit,
     onProbe: () -> Unit,
     onFindHost: () -> Unit,
+    onAutoHost: (Boolean) -> Unit,
+    onFlushOutbox: () -> Unit,
+    onClearOutbox: () -> Unit,
     onOpenDashboard: () -> Unit,
 ) {
     var customDraft by remember(settings.customUrl) { mutableStateOf(settings.customUrl) }
@@ -892,10 +1019,27 @@ private fun SettingsPane(
                 singleLine = true,
                 label = { Text("Custom URL") },
                 placeholder = { Text("http://host:8765") },
+                isError = urlValidationError != null,
+                supportingText = urlValidationError?.let { err -> { Text(err) } },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { onCustomUrl(customDraft) }),
             )
             Button(onClick = { onCustomUrl(customDraft.trim()) }) { Text("Save URL") }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Auto Home / Away", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Switch host preset when Wi‑Fi or Tailscale changes",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(checked = autoHost, onCheckedChange = onAutoHost)
         }
         Text(
             text = settings.baseUrl.ifBlank { "No host URL set" },
@@ -923,6 +1067,22 @@ private fun SettingsPane(
             }
             OutlinedButton(onClick = onOpenDashboard, modifier = Modifier.fillMaxWidth()) {
                 Text("Open house dashboard")
+            }
+        }
+        if (outboxItems.isNotEmpty()) {
+            SectionLabel("Pending sends (${outboxItems.size})")
+            outboxItems.forEach { item ->
+                Text(
+                    text = item.label(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Button(onClick = onFlushOutbox, modifier = Modifier.fillMaxWidth()) {
+                Text("Retry queued sends")
+            }
+            OutlinedButton(onClick = onClearOutbox, modifier = Modifier.fillMaxWidth()) {
+                Text("Clear queue")
             }
         }
         Text(

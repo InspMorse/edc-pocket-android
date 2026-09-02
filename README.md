@@ -28,6 +28,8 @@ See **[ROADMAP.md](ROADMAP.md)** for Phases 2–6 (next: smart connectivity).
 
 Client only. Never hosts.
 
+## Hosts
+
 - Home: `http://192.168.0.99:8765`
 - Away: `http://100.70.53.87:8765` — Tailscale must be connected on the phone
 

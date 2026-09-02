@@ -17,32 +17,27 @@ class ShareActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val shareIntent = intent
         lifecycleScope.launch {
-            val settings = SettingsStore(this@ShareActivity).settings.first()
+            val store = SettingsStore(this@ShareActivity)
+            val outboxStore = OutboxStore(this@ShareActivity)
+            val settings = store.settings.first()
             if (settings.baseUrl.isBlank()) {
                 toast("Set a host URL first")
                 finish()
                 return@launch
             }
+            val client = EdcClient(contentResolver)
             try {
                 when {
                     shareIntent.type?.startsWith("image/") == true -> {
                         val uri = shareIntent.parcelUri() ?: error("No image")
                         val name = uri.lastPathSegment ?: "photo.jpg"
-                        withContext(Dispatchers.IO) {
-                            EdcClient(contentResolver).uploadImage(
-                                settings.baseUrl,
-                                settings.identity,
-                                uri,
-                                name,
-                            )
-                        }
-                        toast("Photo sent to Incoming")
+                        sendPhoto(client, outboxStore, settings, uri, name)
                         finish()
                     }
                     else -> {
                         val text = shareIntent.resolveText()
                         if (text.isBlank()) error("Nothing to send")
-                        showDestinationChooser(text, settings)
+                        showDestinationChooser(text, settings, client, outboxStore)
                     }
                 }
             } catch (e: Exception) {
@@ -52,24 +47,73 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun showDestinationChooser(text: String, settings: EdcSettings) {
+    private suspend fun sendPhoto(
+        client: EdcClient,
+        outboxStore: OutboxStore,
+        settings: EdcSettings,
+        uri: Uri,
+        name: String,
+    ) {
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                client.uploadImage(settings.baseUrl, settings.identity, uri, name)
+            }
+        }
+        result.fold(
+            onSuccess = { toast("Photo sent to Incoming") },
+            onFailure = {
+                withContext(Dispatchers.IO) {
+                    outboxStore.enqueuePhoto(contentResolver, uri, name)
+                }
+                toast("Queued photo for when host is back")
+            },
+        )
+    }
+
+    private suspend fun showDestinationChooser(
+        text: String,
+        settings: EdcSettings,
+        client: EdcClient,
+        outboxStore: OutboxStore,
+    ) {
         withContext(Dispatchers.Main) {
             AlertDialog.Builder(this@ShareActivity)
                 .setTitle("Send to EDC")
                 .setItems(arrayOf("House clipboard", "To-do list")) { _, which ->
                     lifecycleScope.launch {
-                        try {
-                            withContext(Dispatchers.IO) {
-                                val client = EdcClient(contentResolver)
-                                when (which) {
-                                    0 -> client.sendText(settings.baseUrl, settings.identity, text)
-                                    else -> client.addTodo(settings.baseUrl, settings.identity, text)
+                        val kind = if (which == 0) OutboxKind.CLIP else OutboxKind.LIST
+                        val result = withContext(Dispatchers.IO) {
+                            runCatching {
+                                when (kind) {
+                                    OutboxKind.CLIP -> client.sendText(
+                                        settings.baseUrl,
+                                        settings.identity,
+                                        text,
+                                    )
+                                    OutboxKind.LIST -> client.addTodo(
+                                        settings.baseUrl,
+                                        settings.identity,
+                                        text,
+                                    )
+                                    OutboxKind.PHOTO -> error("Unexpected")
                                 }
                             }
-                            toast(if (which == 0) "Sent to clipboard" else "Added to list")
-                        } catch (e: Exception) {
-                            toast(e.message ?: "Send failed")
                         }
+                        result.fold(
+                            onSuccess = {
+                                toast(
+                                    if (which == 0) "Sent to clipboard" else "Added to list",
+                                )
+                            },
+                            onFailure = {
+                                withContext(Dispatchers.IO) {
+                                    outboxStore.enqueue(
+                                        OutboxItem(kind = kind, text = text),
+                                    )
+                                }
+                                toast("Queued for when host is back")
+                            },
+                        )
                         finish()
                     }
                 }

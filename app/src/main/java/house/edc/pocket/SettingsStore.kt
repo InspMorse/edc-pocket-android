@@ -1,6 +1,7 @@
 package house.edc.pocket
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -20,6 +21,7 @@ data class EdcSettings(
     val preset: HostPreset = HostPreset.LAN,
     val customUrl: String = "",
     val clipFilter: String = "All",
+    val autoHost: Boolean = true,
 ) {
     val baseUrl: String
         get() = when (preset) {
@@ -33,6 +35,7 @@ class SettingsStore(private val context: Context) {
     private val presetKey = stringPreferencesKey("preset")
     private val customKey = stringPreferencesKey("custom_url")
     private val clipFilterKey = stringPreferencesKey("clip_filter")
+    private val autoHostKey = booleanPreferencesKey("auto_host")
 
     val settings: Flow<EdcSettings> = context.dataStore.data.map { prefs ->
         EdcSettings(
@@ -41,6 +44,7 @@ class SettingsStore(private val context: Context) {
                 .getOrDefault(HostPreset.LAN),
             customUrl = prefs[customKey] ?: "",
             clipFilter = prefs[clipFilterKey] ?: "All",
+            autoHost = prefs[autoHostKey] ?: true,
         )
     }
 
@@ -53,7 +57,7 @@ class SettingsStore(private val context: Context) {
     }
 
     suspend fun setCustomUrl(value: String) {
-        context.dataStore.edit { it[customKey] = value }
+        context.dataStore.edit { it[customKey] = normalizeHostUrl(value) }
     }
 
     suspend fun rememberWorkingPreset(preset: HostPreset) {
@@ -62,5 +66,9 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setClipFilter(value: String) {
         context.dataStore.edit { it[clipFilterKey] = value }
+    }
+
+    suspend fun setAutoHost(value: Boolean) {
+        context.dataStore.edit { it[autoHostKey] = value }
     }
 }
