@@ -111,11 +111,12 @@ class EdcClient(
                 .addHeader("from", identity)
                 .post(part)
                 .build()
-            http.newCall(req).execute().use { res ->
-                if (res.isSuccessful) return
-                last = "Upload failed (${res.code})"
-                if (res.code != 404 && res.code != 405) break
+            val (ok, code) = http.newCall(req).execute().use { res ->
+                res.isSuccessful to res.code
             }
+            if (ok) return
+            last = "Upload failed ($code)"
+            if (code != 404 && code != 405) break
         }
         error(last)
     }
