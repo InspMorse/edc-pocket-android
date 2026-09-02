@@ -32,28 +32,28 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 
 ---
 
-## Phase 1 — Polish & identity (in progress)
+## Phase 1 — Polish & identity (done)
 
 **Goal:** Feel native on Pixel; faster everyday actions.
 
 | # | Item | Status |
 |---|------|--------|
-| 1.1 | Adaptive launcher icon (foreground/background/round/monochrome) | In progress |
-| 1.2 | Share-target icon | In progress |
-| 1.3 | App shortcuts (send to clip/list, copy latest) | In progress |
-| 1.4 | Pull-to-refresh on Clip + List | In progress |
-| 1.5 | Tap clip row → copy | In progress |
-| 1.6 | Haptic feedback on send/tick/delete | In progress |
-| 1.7 | Host info in Settings (version, hostname) | In progress |
-| 1.8 | Open dashboard button | In progress |
-| 1.9 | Remember clip filter per phone | In progress |
-| 1.10 | Connection label (Home LAN / Away / Offline cached) | In progress |
+| 1.1 | Adaptive launcher icon (foreground/background/round/monochrome) | Done |
+| 1.2 | Share-target icon | Done |
+| 1.3 | App shortcuts (send to clip/list, copy latest) | Done |
+| 1.4 | Pull-to-refresh on Clip + List | Done |
+| 1.5 | Tap clip row → copy | Done |
+| 1.6 | Haptic feedback on send/tick/delete | Done |
+| 1.7 | Host info in Settings (version, hostname) | Done |
+| 1.8 | Open dashboard button | Done |
+| 1.9 | Remember clip filter per phone | Done |
+| 1.10 | Connection label (Home LAN / Away / Offline cached) | Done |
 
 **Exit criteria:** Icon correct on Pixel launcher; fewer taps for daily actions; Settings shows live host identity.
 
 ---
 
-## Phase 2 — Smart connectivity
+## Phase 2 — Smart connectivity (next)
 
 **Goal:** Right host, right network, no lost sends.
 
@@ -143,7 +143,7 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 | Version | Scope |
 |---------|--------|
 | **0.1** | Phase 0 |
-| **0.2** | Phase 1 |
+| **0.2** | Phase 1 (current) |
 | **0.3** | Phase 2 |
 | **0.4** | Phase 3 |
 | **0.5** | Phase 4 |
