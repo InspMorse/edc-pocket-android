@@ -27,6 +27,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -154,6 +161,7 @@ fun PocketApp(
         var hostHealth by remember { mutableStateOf<HostHealth?>(null) }
         var pullRefreshing by remember { mutableStateOf(false) }
         var urlValidationError by remember { mutableStateOf<String?>(null) }
+        var uploadProgress by remember { mutableStateOf<UploadProgress?>(null) }
         val resumeTick = rememberResumeTick()
 
         suspend fun refresh(silent: Boolean = false) {
@@ -229,6 +237,45 @@ fun PocketApp(
                     withContext(Dispatchers.IO) { outboxStore.enqueue(enqueueItem()) }
                     error = null
                     snackbar.showSnackbar("Queued — will send when host is back")
+                },
+            )
+        }
+
+        suspend fun uploadPhotos(uris: List<Uri>, session: String) {
+            if (uris.isEmpty()) return
+            uploadProgress = UploadProgress(0, uris.size)
+            var sent = 0
+            uris.forEachIndexed { index, uri ->
+                val name = uri.lastPathSegment ?: "photo_${index + 1}.jpg"
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        client.uploadImage(
+                            settings.baseUrl,
+                            settings.identity,
+                            uri,
+                            name,
+                            session,
+                        )
+                    }.isSuccess
+                }
+                if (!ok) {
+                    withContext(Dispatchers.IO) {
+                        outboxStore.enqueuePhoto(context.contentResolver, uri, name, session)
+                    }
+                } else {
+                    sent++
+                }
+                uploadProgress = UploadProgress(index + 1, uris.size)
+            }
+            uploadProgress = null
+            refresh()
+            snackbar.showSnackbar(
+                when {
+                    sent == uris.size -> {
+                        if (sent == 1) "Photo sent to Incoming" else "$sent photos sent"
+                    }
+                    sent == 0 -> "Queued ${uris.size} photo(s)"
+                    else -> "Sent $sent, queued ${uris.size - sent}"
                 },
             )
         }
@@ -503,13 +550,27 @@ fun PocketApp(
                             }
                         },
                         onDelete = { item ->
-                            haptic()
-                            snapshot = snapshot.copy(
-                                todos = snapshot.todos.filter { it.id != item.id },
-                            )
                             scope.launch {
-                                hostCall("Removed") {
-                                    client.deleteTodo(settings.baseUrl, settings.identity, item.id)
+                                haptic()
+                                val previous = snapshot.todos
+                                snapshot = snapshot.copy(
+                                    todos = snapshot.todos.filter { it.id != item.id },
+                                )
+                                val undo = snackbar.showSnackbar(
+                                    message = "Removed",
+                                    actionLabel = "Undo",
+                                    duration = SnackbarDuration.Short,
+                                )
+                                if (undo == SnackbarResult.ActionPerformed) {
+                                    snapshot = snapshot.copy(todos = previous)
+                                    return@launch
+                                }
+                                hostCall(null) {
+                                    client.deleteTodo(
+                                        settings.baseUrl,
+                                        settings.identity,
+                                        item.id,
+                                    )
                                 }
                             }
                         },
@@ -533,6 +594,9 @@ fun PocketApp(
                     )
                     PocketTab.SEND -> SendPane(
                         drops = snapshot.drops,
+                        baseUrl = settings.baseUrl,
+                        uploadProgress = uploadProgress,
+                        incomingUrl = { drop -> client.incomingOpenUrl(settings.baseUrl, drop) },
                         onSendClip = { text ->
                             scope.launch {
                                 sendWithOutbox(
@@ -560,33 +624,56 @@ fun PocketApp(
                             }
                         },
                         onUpload = { uri, name, session ->
-                            scope.launch {
-                                sendWithOutbox(
-                                    okMessage = "Photo sent to Incoming",
-                                    enqueueItem = {
-                                        outboxStore.enqueuePhoto(
-                                            context.contentResolver,
-                                            uri,
-                                            name,
-                                            session,
-                                        )
-                                    },
-                                    send = {
-                                        client.uploadImage(
-                                            settings.baseUrl,
-                                            settings.identity,
-                                            uri,
-                                            name,
-                                            session,
-                                        )
-                                    },
-                                )
-                            }
+                            scope.launch { uploadPhotos(listOf(uri), session) }
+                        },
+                        onUploadMultiple = { uris, session ->
+                            scope.launch { uploadPhotos(uris, session) }
                         },
                         onOpenDrop = { drop ->
                             val url = client.incomingOpenUrl(settings.baseUrl, drop)
                             if (url != null) openUrl(context, url) else scope.launch {
                                 snackbar.showSnackbar("No download link for this file")
+                            }
+                        },
+                        onShareDrop = { drop ->
+                            scope.launch {
+                                loading = true
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val (bytes, mime) = client.downloadIncoming(
+                                            settings.baseUrl,
+                                            settings.identity,
+                                            drop,
+                                        )
+                                        IncomingFiles.shareBytes(context, drop.name, bytes, mime)
+                                    }
+                                }
+                                loading = false
+                                result.onFailure {
+                                    snackbar.showSnackbar(it.message ?: "Share failed")
+                                }
+                            }
+                        },
+                        onSaveDrop = { drop ->
+                            scope.launch {
+                                loading = true
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val (bytes, mime) = client.downloadIncoming(
+                                            settings.baseUrl,
+                                            settings.identity,
+                                            drop,
+                                        )
+                                        IncomingFiles.saveToDevice(context, drop.name, bytes, mime)
+                                    }
+                                }
+                                loading = false
+                                result.fold(
+                                    onSuccess = { snackbar.showSnackbar("Saved to device") },
+                                    onFailure = {
+                                        snackbar.showSnackbar(it.message ?: "Save failed")
+                                    },
+                                )
                             }
                         },
                     )
@@ -704,14 +791,29 @@ private fun ClipPane(
     onSend: (String) -> Unit,
 ) {
     var draft by rememberSaveable { mutableStateOf("") }
+    var search by rememberSaveable { mutableStateOf("") }
+    fun matchesSearch(entry: ClipEntry): Boolean =
+        search.isBlank() || entry.text.contains(search, ignoreCase = true)
     val filteredHistory = history.filter { entry ->
-        filter == "All" || entry.from.equals(filter, ignoreCase = true)
+        (filter == "All" || entry.from.equals(filter, ignoreCase = true)) && matchesSearch(entry)
     }.let { list ->
         if (latest == null) list
         else list.filter { it.id != latest.id || it.text != latest.text }
     }
-    val showLatest = latest != null && (filter == "All" || latest.from.equals(filter, ignoreCase = true))
+    val showLatest = latest != null &&
+        (filter == "All" || latest.from.equals(filter, ignoreCase = true)) &&
+        matchesSearch(latest)
     Column(modifier = Modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            singleLine = true,
+            placeholder = { Text("Search clips") },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+        )
         FlowRow(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -742,7 +844,10 @@ private fun ClipPane(
                 SectionLabel("Latest")
                 Spacer(Modifier.height(8.dp))
                 if (!showLatest) {
-                    EmptyHint("Nothing on the house clipboard.")
+                    EmptyHint(
+                        if (search.isNotBlank()) "No clips match \"$search\"."
+                        else "Nothing on the house clipboard.",
+                    )
                 } else {
                     ClipCard(
                         entry = latest!!,
@@ -860,10 +965,16 @@ private fun ListPane(
 @Composable
 private fun SendPane(
     drops: List<DropItem>,
+    baseUrl: String,
+    uploadProgress: UploadProgress?,
+    incomingUrl: (DropItem) -> String?,
     onSendClip: (String) -> Unit,
     onSendList: (String) -> Unit,
     onUpload: (Uri, String, String) -> Unit,
+    onUploadMultiple: (List<Uri>, String) -> Unit,
     onOpenDrop: (DropItem) -> Unit,
+    onShareDrop: (DropItem) -> Unit,
+    onSaveDrop: (DropItem) -> Unit,
 ) {
     val context = LocalContext.current
     var draft by rememberSaveable { mutableStateOf("") }
@@ -875,6 +986,11 @@ private fun SendPane(
     }
     val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) onUpload(uri, uri.lastPathSegment ?: "photo.jpg", session)
+    }
+    val pickMultiple = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20),
+    ) { uris ->
+        if (uris.isNotEmpty()) onUploadMultiple(uris, session)
     }
 
     Column(
@@ -923,6 +1039,20 @@ private fun SendPane(
             label = { Text("Session folder (optional)") },
             placeholder = { Text("Drop/Sessions/2026-09-02 – Event") },
         )
+        uploadProgress?.let { progress ->
+            Column(modifier = Modifier.fillMaxWidth()) {
+                LinearProgressIndicator(
+                    progress = { progress.done.toFloat() / progress.total.coerceAtLeast(1) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = EdcCyan,
+                )
+                Text(
+                    text = "Uploading ${progress.done} / ${progress.total}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = EdcMuted,
+                )
+            }
+        }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(
                 onClick = {
@@ -936,6 +1066,7 @@ private fun SendPane(
                     captureUri = uri
                     takePicture.launch(uri)
                 },
+                enabled = uploadProgress == null,
             ) {
                 Icon(Icons.Outlined.PhotoCamera, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -947,10 +1078,21 @@ private fun SendPane(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
                     )
                 },
+                enabled = uploadProgress == null,
             ) {
                 Icon(Icons.Outlined.PhotoLibrary, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Library")
+                Text("One")
+            }
+            OutlinedButton(
+                onClick = {
+                    pickMultiple.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                },
+                enabled = uploadProgress == null,
+            ) {
+                Text("Many")
             }
         }
         SectionLabel("Incoming")
@@ -958,22 +1100,63 @@ private fun SendPane(
             EmptyHint("No incoming files yet.")
         } else {
             drops.forEach { drop ->
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = EdcSurface),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onOpenDrop(drop) },
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text(drop.name, fontWeight = FontWeight.Medium)
-                        Text(
-                            text = metaLine(drop.from, drop.ts, formatSize(drop.size)),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = EdcMuted,
-                        )
-                    }
+                DropCard(
+                    drop = drop,
+                    imageUrl = incomingUrl(drop)?.takeIf { drop.isImage() },
+                    onOpen = { onOpenDrop(drop) },
+                    onShare = { onShareDrop(drop) },
+                    onSave = { onSaveDrop(drop) },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DropCard(
+    drop: DropItem,
+    imageUrl: String?,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+    onSave: () -> Unit,
+) {
+    val context = LocalContext.current
+    Card(
+        colors = CardDefaults.cardColors(containerColor = EdcSurface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (imageUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = drop.name,
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
                 }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(drop.name, fontWeight = FontWeight.Medium)
+                    Text(
+                        text = metaLine(drop.from, drop.ts, formatSize(drop.size)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = EdcMuted,
+                    )
+                }
+            }
+            Row(modifier = Modifier.padding(top = 4.dp)) {
+                TextButton(onClick = onOpen) { Text("Open") }
+                TextButton(onClick = onShare) { Text("Share") }
+                TextButton(onClick = onSave) { Text("Save") }
             }
         }
     }

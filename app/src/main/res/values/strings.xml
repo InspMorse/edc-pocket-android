@@ -13,4 +13,7 @@
     <string name="poll_off">Background clip alerts off</string>
     <string name="poll_conservative">Background clip alerts every hour</string>
     <string name="poll_active">Background clip alerts every 15 minutes</string>
+    <string name="session_folder_title">Incoming session</string>
+    <string name="session_folder_hint">Session folder (optional)</string>
+    <string name="send_to_incoming">Send</string>
 </resources>

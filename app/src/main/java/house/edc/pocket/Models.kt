@@ -22,6 +22,17 @@ data class DropItem(
     val ts: String,
     val size: Long,
     val path: String = "",
+) {
+    fun isImage(): Boolean {
+        val lower = name.lowercase()
+        return lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") ||
+            lower.endsWith(".webp") || lower.endsWith(".gif") || lower.endsWith(".heic")
+    }
+}
+
+data class UploadProgress(
+    val done: Int,
+    val total: Int,
 )
 
 data class HostSnapshot(

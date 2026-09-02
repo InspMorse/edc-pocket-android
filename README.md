@@ -24,8 +24,9 @@ From the command line: `./gradlew assembleDebug`. The APK lands in the same `app
 - **Background** — refreshes every 5s while open; keeps last known data if the host drops offline
 - **v0.2** — adaptive icon, app shortcuts, pull-to-refresh, tap-to-copy, haptics, host info in Settings
 - **v0.3** — auto Home/Away, offline outbox, network re-probe, smarter polling, URL validation
+- **v0.4** — home screen widget, Quick Settings tile, background clip alerts
 
-See **[ROADMAP.md](ROADMAP.md)** for Phases 3–6 (next: glanceable widget/tile).
+See **[ROADMAP.md](ROADMAP.md)** for Phases 4–6 (next: richer send/receive).
 
 Client only. Never hosts.
 

@@ -72,41 +72,41 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 
 ---
 
-## Phase 3 — Glanceable access (next)
+## Phase 3 — Glanceable access (done)
 
 **Goal:** Use the house clipboard without opening the full app.
 
-| # | Item |
-|---|------|
-| 3.1 | Home screen widget — latest clip preview |
-| 3.2 | Widget actions — Copy latest, Open app |
-| 3.3 | Quick Settings tile — copy house clipboard |
-| 3.4 | Optional notification on new clip (WorkManager) |
-| 3.5 | Notification actions — Copy / Open |
-| 3.6 | Configurable background poll (off / conservative / active) |
+| # | Item | Status |
+|---|------|--------|
+| 3.1 | Home screen widget — latest clip preview | Done |
+| 3.2 | Widget actions — Copy latest, Open app | Done |
+| 3.3 | Quick Settings tile — copy house clipboard | Done |
+| 3.4 | Optional notification on new clip (WorkManager) | Done |
+| 3.5 | Notification actions — Copy / Open | Done |
+| 3.6 | Configurable background poll (off / conservative / active) | Done |
 
 **Exit criteria:** Latest clip reachable from home screen or notification in one tap.
 
 ---
 
-## Phase 4 — Richer send & receive
+## Phase 4 — Richer send & receive (done)
 
 **Goal:** Photos and Incoming feel first-class.
 
-| # | Item |
-|---|------|
-| 4.1 | Incoming image thumbnails |
-| 4.2 | Multi-photo upload into session folder |
-| 4.3 | Share target: session folder prompt |
-| 4.4 | Share multiple images (`ACTION_SEND_MULTIPLE`) |
-| 4.5 | Download Incoming to phone / share out |
-| 4.6 | Upload progress for large photos |
-| 4.7 | Clip history search (local filter) |
-| 4.8 | Undo delete todo |
+| # | Item | Status |
+|---|------|--------|
+| 4.1 | Incoming image thumbnails | Done |
+| 4.2 | Multi-photo upload into session folder | Done |
+| 4.3 | Share target: session folder prompt | Done |
+| 4.4 | Share multiple images (`ACTION_SEND_MULTIPLE`) | Done |
+| 4.5 | Download Incoming to phone / share out | Done |
+| 4.6 | Upload progress for large photos | Done |
+| 4.7 | Clip history search (local filter) | Done |
+| 4.8 | Undo delete todo | Done |
 
 ---
 
-## Phase 5 — Deeper house integration
+## Phase 5 — Deeper house integration (next)
 
 **Goal:** Pocket stays in sync as Everyday Clipboard evolves.
 
@@ -144,9 +144,9 @@ Branch: `cursor/finish-edc-pocket-android-f18a` · PR #2
 |---------|--------|
 | **0.1** | Phase 0 |
 | **0.2** | Phase 1 |
-| **0.3** | Phase 2 (current) |
+| **0.3** | Phase 2 |
 | **0.4** | Phase 3 |
-| **0.5** | Phase 4 |
+| **0.5** | Phase 4 (current) |
 | **1.0** | Phase 6 release |
 
 ---

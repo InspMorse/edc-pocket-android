@@ -145,6 +145,30 @@ class EdcClient(
         }
     }
 
+    fun downloadIncoming(base: String, identity: String, drop: DropItem): Pair<ByteArray, String> {
+        val openUrl = incomingOpenUrl(base, drop) ?: error("No download link")
+        val req = Request.Builder()
+            .url(openUrl)
+            .addHeader("from", identity)
+            .get()
+            .build()
+        http.newCall(req).execute().use { res ->
+            if (!res.isSuccessful) error("Download failed (${res.code})")
+            val bytes = res.body?.bytes() ?: error("Empty file")
+            val mime = res.header("Content-Type")?.substringBefore(";")?.trim()
+                ?: guessMime(drop.name)
+            return bytes to mime
+        }
+    }
+
+    private fun guessMime(name: String): String = when {
+        name.endsWith(".png", true) -> "image/png"
+        name.endsWith(".webp", true) -> "image/webp"
+        name.endsWith(".gif", true) -> "image/gif"
+        name.endsWith(".heic", true) -> "image/heic"
+        else -> "image/jpeg"
+    }
+
     fun uploadImage(
         base: String,
         identity: String,
