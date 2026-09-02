@@ -22,8 +22,8 @@ android {
         applicationId = "house.edc.pocket"
         minSdk = 31
         targetSdk = 35
-        versionCode = 9
-        versionName = "1.3"
+        versionCode = 10
+        versionName = "1.5"
     }
 
     signingConfigs {
@@ -91,6 +91,7 @@ dependencies {
     ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.glance:glance-appwidget:1.1.1")
     implementation("androidx.glance:glance-material3:1.1.1")
+    implementation("com.google.android.gms:play-services-wearable:19.0.0")
     implementation("io.coil-kt:coil-compose:2.7.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation(composeBom)

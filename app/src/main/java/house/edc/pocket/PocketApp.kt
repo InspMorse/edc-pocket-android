@@ -140,6 +140,7 @@ fun PocketApp(
     networkMonitor: NetworkMonitor,
     connectionDoctor: ConnectionDoctor,
     launchAction: LaunchAction = LaunchAction.NONE,
+    launchText: String = "",
     onLaunchActionHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
@@ -178,6 +179,7 @@ fun PocketApp(
         var lastSyncedAt by remember { mutableStateOf<Long?>(null) }
         var liveStreamActive by remember { mutableStateOf(false) }
         var offlineBaseline by remember { mutableStateOf<String?>(null) }
+        var pendingCamera by remember { mutableStateOf(false) }
         var pullRefreshing by remember { mutableStateOf(false) }
         var urlValidationError by remember { mutableStateOf<String?>(null) }
         var uploadProgress by remember { mutableStateOf<UploadProgress?>(null) }
@@ -219,7 +221,7 @@ fun PocketApp(
                     val entry = outcome.snapshot.latest ?: outcome.snapshot.history.firstOrNull()
                     if (entry != null && outcome.fromNetwork) {
                         LatestClipStore(context).save(entry)
-                        scope.launch { EdcWidgetUpdater.updateAll(context) }
+                        SurfaceEffects.afterClipSaved(context, settings)
                     }
                     if (outcome.fromNetwork && offlineBaseline != null) {
                         val newFp = snapshotFingerprint(outcome.snapshot)
@@ -237,6 +239,7 @@ fun PocketApp(
                     if (outcome.health != null && outcome.fromNetwork) {
                         PushRegistration.registerIfPossible(context, client, settings, outcome.health)
                     }
+                    SurfaceEffects.afterSnapshot(context, outcome.snapshot, settings)
                 },
                 onFailure = {
                     val cached = withContext(Dispatchers.IO) { syncCoordinator.loadCached(settings) }
@@ -421,34 +424,50 @@ fun PocketApp(
             if (health != null) hostHealth = health
         }
 
-        LaunchedEffect(launchAction, settings.baseUrl, settings.identity) {
+        LaunchedEffect(launchAction, settings.baseUrl, settings.identity, launchText) {
             if (launchAction == LaunchAction.NONE) return@LaunchedEffect
             when (launchAction) {
                 LaunchAction.OPEN_SEND -> tab = PocketTab.SEND.name
+                LaunchAction.OPEN_SEND_CAMERA -> {
+                    tab = PocketTab.SEND.name
+                    pendingCamera = true
+                }
                 LaunchAction.OPEN_LIST -> tab = PocketTab.LIST.name
+                LaunchAction.OPEN_CLIP -> tab = PocketTab.CLIP.name
                 LaunchAction.COPY_LATEST -> {
-                    val base = settings.baseUrl
-                    if (base.isBlank()) {
-                        error = "Set a host URL in Settings."
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching { ClipActions.copyHouseClipboard(context) }
+                    }
+                    if (result.getOrNull().isNullOrBlank()) {
+                        error = "Nothing to copy"
+                        snackbar.showSnackbar("Nothing on the house clipboard")
                     } else {
-                        val result = withContext(Dispatchers.IO) {
-                            runCatching { client.load(base, settings.identity) }
-                        }
-                        result.fold(
-                            onSuccess = { snap ->
-                                val text = snap.latest?.text ?: snap.history.firstOrNull()?.text
-                                if (text.isNullOrBlank()) {
-                                    snackbar.showSnackbar("Nothing on the house clipboard")
-                                } else {
-                                    val clipboard = context.getSystemService(ClipboardManager::class.java)
-                                    clipboard.setPrimaryClip(ClipData.newPlainText("EDC", text))
-                                    haptic()
-                                    snackbar.showSnackbar("Copied latest clip")
-                                }
-                            },
-                            onFailure = {
-                                error = it.message ?: "Host unreachable"
-                            },
+                        haptic()
+                        snackbar.showSnackbar("Copied latest clip")
+                    }
+                }
+                LaunchAction.SEND_TO_CLIP -> {
+                    val text = launchText
+                    if (text.isBlank()) {
+                        snackbar.showSnackbar("No text to send")
+                    } else {
+                        sendWithOutbox(
+                            okMessage = "Sent to clipboard",
+                            enqueueItem = { OutboxItem(kind = OutboxKind.CLIP, text = text) },
+                            send = { client.sendText(settings.baseUrl, settings.identity, text) },
+                        )
+                    }
+                }
+                LaunchAction.SEND_TO_LIST -> {
+                    val text = launchText
+                    if (text.isBlank()) {
+                        tab = PocketTab.SEND.name
+                        snackbar.showSnackbar("Type on the Send tab or share text from another app")
+                    } else {
+                        sendWithOutbox(
+                            okMessage = "Added to list",
+                            enqueueItem = { OutboxItem(kind = OutboxKind.LIST, text = text) },
+                            send = { client.addTodo(settings.baseUrl, settings.identity, text) },
                         )
                     }
                 }
@@ -947,9 +966,12 @@ fun PocketApp(
                                 )
                             }
                         },
+                        requestCamera = pendingCamera,
+                        onCameraHandled = { pendingCamera = false },
                     )
                     PocketTab.SETTINGS -> SettingsPane(
                         settings = settings,
+                        store = store,
                         onIdentity = { scope.launch { store.setIdentity(it) } },
                         onPreset = { scope.launch { store.setPreset(it) } },
                         onProbe = {
@@ -1369,6 +1391,8 @@ private fun SendPane(
     onOpenDrop: (DropItem) -> Unit,
     onShareDrop: (DropItem) -> Unit,
     onSaveDrop: (DropItem) -> Unit,
+    requestCamera: Boolean = false,
+    onCameraHandled: () -> Unit = {},
 ) {
     val context = LocalContext.current
     var draft by rememberSaveable { mutableStateOf("") }
@@ -1385,6 +1409,20 @@ private fun SendPane(
         ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20),
     ) { uris ->
         if (uris.isNotEmpty()) onUploadMultiple(uris, session)
+    }
+
+    LaunchedEffect(requestCamera) {
+        if (!requestCamera) return@LaunchedEffect
+        val dir = File(context.cacheDir, "pics").apply { mkdirs() }
+        val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.files",
+            file,
+        )
+        captureUri = uri
+        takePicture.launch(uri)
+        onCameraHandled()
     }
 
     Column(
@@ -1570,6 +1608,7 @@ private fun DropCard(
 @Composable
 private fun SettingsPane(
     settings: EdcSettings,
+    store: SettingsStore,
     hostHealth: HostHealth?,
     outboxItems: List<OutboxItem>,
     autoHost: Boolean,
@@ -1594,6 +1633,9 @@ private fun SettingsPane(
     var doctorReport by remember { mutableStateOf<ConnectionReport?>(null) }
     var doctorRunning by remember { mutableStateOf(false) }
     var customDraft by remember(settings.customUrl) { mutableStateOf(settings.customUrl) }
+    var sessionsDraft by remember(settings.pinnedSessions) {
+        mutableStateOf(formatPinnedSessions(settings.pinnedSessions))
+    }
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1676,7 +1718,62 @@ private fun SettingsPane(
         }
         SectionLabel("Glanceable")
         Text(
-            text = "Add the home screen widget, Quick Settings tile “EDC clip”, and optional background alerts.",
+            text = "Home widget, lock screen widget, Quick Settings tiles, and optional background alerts.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Show open todos on widget", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Display how many list items are still open",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.widgetShowTodoCount,
+                onCheckedChange = { scope.launch { store.setWidgetShowTodoCount(it) } },
+            )
+        }
+        Text("Widget tap action", style = MaterialTheme.typography.bodySmall, color = EdcMuted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            WidgetTapAction.entries.forEach { action ->
+                FilterChip(
+                    selected = settings.widgetTapAction == action,
+                    onClick = { scope.launch { store.setWidgetTapAction(action) } },
+                    label = { Text(action.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Persistent clip preview", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Ongoing notification with the latest house clip",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.persistentClipPreview,
+                onCheckedChange = { scope.launch { store.setPersistentClipPreview(it) } },
+            )
+        }
+        Text(
+            text = "Quick Settings: add tiles “EDC list” and “EDC photo” from the tile editor.",
             style = MaterialTheme.typography.bodySmall,
             color = EdcMuted,
         )
@@ -1699,6 +1796,81 @@ private fun SettingsPane(
                 BackgroundPollMode.CONSERVATIVE -> "Checks about once an hour when idle."
                 BackgroundPollMode.ACTIVE -> "Checks every 15 minutes (Android minimum)."
             },
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        SectionLabel("Share & shortcuts")
+        Text("Default share destination", style = MaterialTheme.typography.bodySmall, color = EdcMuted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ShareDestination.entries.forEach { dest ->
+                FilterChip(
+                    selected = settings.shareDestination == dest,
+                    onClick = { scope.launch { store.setShareDestination(dest) } },
+                    label = { Text(dest.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Skip share chooser", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Send straight to the default destination above",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.skipShareChooser,
+                onCheckedChange = { scope.launch { store.setSkipShareChooser(it) } },
+            )
+        }
+        OutlinedTextField(
+            value = sessionsDraft,
+            onValueChange = { sessionsDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Pinned Incoming sessions") },
+            placeholder = { Text("holiday, receipts, kids") },
+            supportingText = { Text("Comma-separated — adds direct share shortcuts per folder") },
+        )
+        Button(
+            onClick = {
+                scope.launch {
+                    store.setPinnedSessions(parsePinnedSessions(sessionsDraft))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Save session shortcuts")
+        }
+        Text("NFC tag action", style = MaterialTheme.typography.bodySmall, color = EdcMuted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NfcAction.entries.forEach { action ->
+                FilterChip(
+                    selected = settings.nfcAction == action,
+                    onClick = { scope.launch { store.setNfcAction(action) } },
+                    label = { Text(action.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        Text(
+            text = "Program tags with edc://copy, edc://open, edc://list, or edc://send?text=hello",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        Text(
+            text = "Automation intents are documented in AUTOMATION.md in the repo.",
             style = MaterialTheme.typography.bodySmall,
             color = EdcMuted,
         )

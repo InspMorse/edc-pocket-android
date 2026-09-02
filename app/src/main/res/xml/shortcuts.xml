@@ -33,4 +33,20 @@
             android:targetClass="house.edc.pocket.MainActivity"
             android:targetPackage="house.edc.pocket" />
     </shortcut>
+    <shortcut
+        android:shortcutId="send_to_list"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_list"
+        android:shortcutShortLabel="@string/shortcut_send_to_list"
+        android:shortcutLongLabel="@string/shortcut_send_to_list_long">
+        <intent
+            android:action="house.edc.pocket.action.SEND_TO_LIST"
+            android:targetClass="house.edc.pocket.MainActivity"
+            android:targetPackage="house.edc.pocket" />
+        <capability-binding android:key="actions.intent.CREATE_THING">
+            <parameter
+                android:name="thing.name"
+                android:key="text" />
+        </capability-binding>
+    </shortcut>
 </shortcuts>

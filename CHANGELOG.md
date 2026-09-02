@@ -7,6 +7,23 @@ Versioning: **0.x** = pre-release phases · **1.0** = Phase 6 trust release · *
 
 ---
 
+## [1.5.0] — Phase 9
+
+### Added
+
+- Widget v2 — open todo count, configurable tap action (open app / list / clip / copy)
+- Lock screen Glance widget (where OS supports keyguard widgets)
+- Quick Settings tiles — **EDC list**, **EDC photo** (plus existing EDC clip)
+- Optional persistent notification with latest clip preview
+- Share target v2 — default destination + skip chooser; remembers last choice
+- Voice/App shortcut — “Send to house list”
+- Tasker/MacroDroid automation broadcasts — see [AUTOMATION.md](AUTOMATION.md)
+- Wear Data Layer publisher for `/edc/latest_clip` (phone-side bridge)
+- NFC dispatch for `edc://copy`, `edc://open`, `edc://list`, `edc://send`
+- Direct share shortcuts for pinned Incoming session folders
+
+---
+
 ## [1.3.0] — Phase 8
 
 ### Added

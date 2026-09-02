@@ -10,6 +10,12 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "edc_settings")
 
+internal fun parsePinnedSessions(raw: String): List<String> =
+    raw.split(",").map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+
+internal fun formatPinnedSessions(sessions: List<String>): String =
+    sessions.map { it.trim() }.filter { it.isNotEmpty() }.distinct().joinToString(",")
+
 enum class HostPreset(val label: String, val url: String) {
     LAN("Home Wi-Fi", "http://192.168.0.99:8765"),
     TAILSCALE("Away", "http://100.70.53.87:8765"),
@@ -27,6 +33,13 @@ data class EdcSettings(
     val onboardingComplete: Boolean = true,
     val listSortMode: ListSortMode = ListSortMode.OPEN_FIRST,
     val listPersonFilter: ListPersonFilter = ListPersonFilter.ALL,
+    val shareDestination: ShareDestination = ShareDestination.ASK,
+    val skipShareChooser: Boolean = false,
+    val widgetShowTodoCount: Boolean = true,
+    val widgetTapAction: WidgetTapAction = WidgetTapAction.OPEN_APP,
+    val persistentClipPreview: Boolean = false,
+    val nfcAction: NfcAction = NfcAction.COPY_CLIP,
+    val pinnedSessions: List<String> = emptyList(),
 ) {
     val baseUrl: String
         get() {
@@ -49,6 +62,13 @@ class SettingsStore(private val context: Context) {
     private val onboardingKey = booleanPreferencesKey("onboarding_complete")
     private val listSortKey = stringPreferencesKey("list_sort")
     private val listPersonFilterKey = stringPreferencesKey("list_person_filter")
+    private val shareDestinationKey = stringPreferencesKey("share_destination")
+    private val skipShareChooserKey = booleanPreferencesKey("skip_share_chooser")
+    private val widgetShowTodoKey = booleanPreferencesKey("widget_show_todo")
+    private val widgetTapActionKey = stringPreferencesKey("widget_tap_action")
+    private val persistentPreviewKey = booleanPreferencesKey("persistent_clip_preview")
+    private val nfcActionKey = stringPreferencesKey("nfc_action")
+    private val pinnedSessionsKey = stringPreferencesKey("pinned_sessions")
 
     val settings: Flow<EdcSettings> = context.dataStore.data.map { prefs ->
         val legacyInstall = prefs.asMap().keys.any { it != onboardingKey }
@@ -70,6 +90,19 @@ class SettingsStore(private val context: Context) {
             listPersonFilter = runCatching {
                 ListPersonFilter.valueOf(prefs[listPersonFilterKey] ?: "ALL")
             }.getOrDefault(ListPersonFilter.ALL),
+            shareDestination = runCatching {
+                ShareDestination.valueOf(prefs[shareDestinationKey] ?: "ASK")
+            }.getOrDefault(ShareDestination.ASK),
+            skipShareChooser = prefs[skipShareChooserKey] ?: false,
+            widgetShowTodoCount = prefs[widgetShowTodoKey] ?: true,
+            widgetTapAction = runCatching {
+                WidgetTapAction.valueOf(prefs[widgetTapActionKey] ?: "OPEN_APP")
+            }.getOrDefault(WidgetTapAction.OPEN_APP),
+            persistentClipPreview = prefs[persistentPreviewKey] ?: false,
+            nfcAction = runCatching {
+                NfcAction.valueOf(prefs[nfcActionKey] ?: "COPY_CLIP")
+            }.getOrDefault(NfcAction.COPY_CLIP),
+            pinnedSessions = parsePinnedSessions(prefs[pinnedSessionsKey].orEmpty()),
         )
     }
 
@@ -115,5 +148,33 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setListPersonFilter(value: ListPersonFilter) {
         context.dataStore.edit { it[listPersonFilterKey] = value.name }
+    }
+
+    suspend fun setShareDestination(value: ShareDestination) {
+        context.dataStore.edit { it[shareDestinationKey] = value.name }
+    }
+
+    suspend fun setSkipShareChooser(value: Boolean) {
+        context.dataStore.edit { it[skipShareChooserKey] = value }
+    }
+
+    suspend fun setWidgetShowTodoCount(value: Boolean) {
+        context.dataStore.edit { it[widgetShowTodoKey] = value }
+    }
+
+    suspend fun setWidgetTapAction(value: WidgetTapAction) {
+        context.dataStore.edit { it[widgetTapActionKey] = value.name }
+    }
+
+    suspend fun setPersistentClipPreview(value: Boolean) {
+        context.dataStore.edit { it[persistentPreviewKey] = value }
+    }
+
+    suspend fun setNfcAction(value: NfcAction) {
+        context.dataStore.edit { it[nfcActionKey] = value.name }
+    }
+
+    suspend fun setPinnedSessions(value: List<String>) {
+        context.dataStore.edit { it[pinnedSessionsKey] = formatPinnedSessions(value) }
     }
 }

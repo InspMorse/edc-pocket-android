@@ -4,7 +4,12 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.NFC" />
     <uses-feature android:name="android.hardware.camera" android:required="false" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
 
     <application
         android:allowBackup="true"
@@ -22,6 +27,16 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="house.edc.pocket.action.COPY_LATEST" />
+                <action android:name="house.edc.pocket.action.OPEN_SEND" />
+                <action android:name="house.edc.pocket.action.OPEN_SEND_CAMERA" />
+                <action android:name="house.edc.pocket.action.OPEN_LIST" />
+                <action android:name="house.edc.pocket.action.OPEN_CLIP" />
+                <action android:name="house.edc.pocket.action.SEND_TO_CLIP" />
+                <action android:name="house.edc.pocket.action.SEND_TO_LIST" />
+                <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
             <meta-data
                 android:name="android.app.shortcuts"
@@ -56,11 +71,39 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".NfcDispatchActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="edc" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.nfc.action.TAG_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".CopyClipReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="house.edc.pocket.action.COPY_CLIP" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name=".AutomationReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="house.edc.pocket.action.AUTOMATION_COPY" />
+                <action android:name="house.edc.pocket.action.AUTOMATION_SEND_CLIP" />
+                <action android:name="house.edc.pocket.action.AUTOMATION_SEND_LIST" />
+                <action android:name="house.edc.pocket.action.AUTOMATION_OPEN_LIST" />
+                <action android:name="house.edc.pocket.action.AUTOMATION_OPEN_SEND" />
             </intent-filter>
         </receiver>
 
@@ -75,6 +118,17 @@
                 android:resource="@xml/edc_widget_info" />
         </receiver>
 
+        <receiver
+            android:name=".EdcLockWidgetReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/edc_lock_widget_info" />
+        </receiver>
+
         <service
             android:name=".CopyClipTileService"
             android:exported="true"
@@ -85,6 +139,33 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
         </service>
+
+        <service
+            android:name=".OpenListTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_shortcut_list"
+            android:label="@string/tile_open_list"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".SnapPhotoTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_shortcut_send"
+            android:label="@string/tile_snap_photo"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <service
+            android:name=".PersistentClipService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

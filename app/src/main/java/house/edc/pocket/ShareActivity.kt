@@ -35,7 +35,7 @@ class ShareActivity : ComponentActivity() {
                         shareIntent.type?.startsWith("image/") == true -> {
                         val uris = shareIntent.imageUris()
                         if (uris.isEmpty()) error("No images")
-                        val session = promptSession() ?: run {
+                        val session = resolveSession(shareIntent) ?: run {
                             finish()
                             return@launch
                         }
@@ -45,7 +45,7 @@ class ShareActivity : ComponentActivity() {
                     shareIntent.type?.startsWith("image/") == true -> {
                         val uris = shareIntent.imageUris()
                         val uri = uris.firstOrNull() ?: error("No image")
-                        val session = promptSession() ?: run {
+                        val session = resolveSession(shareIntent) ?: run {
                             finish()
                             return@launch
                         }
@@ -55,7 +55,13 @@ class ShareActivity : ComponentActivity() {
                     else -> {
                         val text = shareIntent.resolveText()
                         if (text.isBlank()) error("Nothing to send")
-                        showDestinationChooser(text, settings, client, outboxStore)
+                        val destination = resolveShareDestination(shareIntent, settings)
+                        if (destination == ShareDestination.ASK) {
+                            showDestinationChooser(text, settings, client, outboxStore)
+                        } else {
+                            sendTextDestination(text, destination, settings, client, outboxStore)
+                            finish()
+                        }
                     }
                 }
             } catch (e: Exception) {
@@ -65,10 +71,29 @@ class ShareActivity : ComponentActivity() {
         }
     }
 
-    private suspend fun promptSession(): String? = suspendCancellableCoroutine { cont ->
+    private suspend fun resolveSession(shareIntent: Intent): String? {
+        val preset = shareIntent.getStringExtra(EdcIntents.EXTRA_SESSION).orEmpty()
+        if (shareIntent.getBooleanExtra(EdcIntents.EXTRA_SKIP_SESSION_PROMPT, false)) {
+            return preset
+        }
+        return promptSession(preset)
+    }
+
+    private fun resolveShareDestination(shareIntent: Intent, settings: EdcSettings): ShareDestination {
+        shareIntent.getStringExtra(EdcIntents.EXTRA_SHARE_DESTINATION)?.let { raw ->
+            runCatching { ShareDestination.valueOf(raw) }.getOrNull()?.let { return it }
+        }
+        if (settings.skipShareChooser && settings.shareDestination != ShareDestination.ASK) {
+            return settings.shareDestination
+        }
+        return ShareDestination.ASK
+    }
+
+    private suspend fun promptSession(initial: String = ""): String? = suspendCancellableCoroutine { cont ->
         val input = EditText(this).apply {
             hint = getString(R.string.session_folder_hint)
             setSingleLine()
+            setText(initial)
         }
         AlertDialog.Builder(this)
             .setTitle(R.string.session_folder_title)
@@ -119,6 +144,51 @@ class ShareActivity : ComponentActivity() {
         )
     }
 
+    private suspend fun sendTextDestination(
+        text: String,
+        destination: ShareDestination,
+        settings: EdcSettings,
+        client: EdcClient,
+        outboxStore: OutboxStore,
+    ) {
+        val kind = when (destination) {
+            ShareDestination.CLIP -> OutboxKind.CLIP
+            ShareDestination.LIST -> OutboxKind.LIST
+            ShareDestination.ASK -> return
+        }
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                when (kind) {
+                    OutboxKind.CLIP -> client.sendText(settings.baseUrl, settings.identity, text)
+                    OutboxKind.LIST -> client.addTodo(settings.baseUrl, settings.identity, text)
+                    OutboxKind.PHOTO -> error("Unexpected")
+                }
+            }
+        }
+        result.fold(
+            onSuccess = {
+                withContext(Dispatchers.Main) {
+                    storeSharePreference(settings, destination)
+                    toast(if (kind == OutboxKind.CLIP) "Sent to clipboard" else "Added to list")
+                }
+            },
+            onFailure = {
+                withContext(Dispatchers.IO) {
+                    outboxStore.enqueue(OutboxItem(kind = kind, text = text))
+                }
+                toast("Queued for when host is back")
+            },
+        )
+    }
+
+    private suspend fun storeSharePreference(settings: EdcSettings, destination: ShareDestination) {
+        if (settings.skipShareChooser) return
+        val store = SettingsStore(this)
+        if (settings.shareDestination == ShareDestination.ASK) {
+            store.setShareDestination(destination)
+        }
+    }
+
     private suspend fun showDestinationChooser(
         text: String,
         settings: EdcSettings,
@@ -130,39 +200,8 @@ class ShareActivity : ComponentActivity() {
                 .setTitle("Send to EDC")
                 .setItems(arrayOf("House clipboard", "To-do list")) { _, which ->
                     lifecycleScope.launch {
-                        val kind = if (which == 0) OutboxKind.CLIP else OutboxKind.LIST
-                        val result = withContext(Dispatchers.IO) {
-                            runCatching {
-                                when (kind) {
-                                    OutboxKind.CLIP -> client.sendText(
-                                        settings.baseUrl,
-                                        settings.identity,
-                                        text,
-                                    )
-                                    OutboxKind.LIST -> client.addTodo(
-                                        settings.baseUrl,
-                                        settings.identity,
-                                        text,
-                                    )
-                                    OutboxKind.PHOTO -> error("Unexpected")
-                                }
-                            }
-                        }
-                        result.fold(
-                            onSuccess = {
-                                toast(
-                                    if (which == 0) "Sent to clipboard" else "Added to list",
-                                )
-                            },
-                            onFailure = {
-                                withContext(Dispatchers.IO) {
-                                    outboxStore.enqueue(
-                                        OutboxItem(kind = kind, text = text),
-                                    )
-                                }
-                                toast("Queued for when host is back")
-                            },
-                        )
+                        val destination = if (which == 0) ShareDestination.CLIP else ShareDestination.LIST
+                        sendTextDestination(text, destination, settings, client, outboxStore)
                         finish()
                     }
                 }

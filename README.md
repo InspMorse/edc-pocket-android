@@ -47,8 +47,10 @@ CI runs on every push/PR — see [`.github/workflows/ci.yml`](.github/workflows/
 - **v1.0** — integration tests, Compose smoke test, CI, release build, changelog ([CHANGELOG.md](CHANGELOG.md))
 - **v1.1** — onboarding, swipe actions, pins, list sort, rich clips, host theme accent, tablet layout
 - **v1.3** — Room cache, conditional fetch, outbox v2, connection doctor, staleness UI, SSE client
+- **v1.5** — widget v2, lock screen widget, QS tiles, persistent preview, share v2, NFC, automation API
 
-See **[ROADMAP.md](ROADMAP.md)** — **v1.3** shipped (Phase 8); Phases **9–12** remain toward **2.0**.
+See **[ROADMAP.md](ROADMAP.md)** — **v1.5** shipped (Phase 9); Phases **10–12** remain toward **2.0**.  
+Automation intents: **[AUTOMATION.md](AUTOMATION.md)**
 
 Client only. Never hosts.
 

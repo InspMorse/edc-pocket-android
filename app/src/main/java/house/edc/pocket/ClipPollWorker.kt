@@ -29,6 +29,8 @@ class ClipPollWorker(
 
         if (latest != null) {
             clipStore.save(latest)
+            WidgetSnapshotStore(context).updateFromSnapshot(outcome.snapshot)
+            SurfaceEffects.afterClipSaved(context, settings)
             EdcWidgetUpdater.updateAll(context)
             val fp = clipStore.fingerprint(latest)
             if (previousNotified.isNotEmpty() && fp != previousNotified) {

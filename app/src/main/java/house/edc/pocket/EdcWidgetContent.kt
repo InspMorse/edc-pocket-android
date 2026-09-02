@@ -28,11 +28,10 @@ private val Muted = ColorProvider(0xFF94A3B8.toInt())
 @Composable
 fun EdcWidgetContent(context: Context) {
     val clip = LatestClipStore(context).peek()
-    val openApp = actionStartActivity(
-        Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        },
-    )
+    val widgetData = WidgetSnapshotStore(context)
+    val openTodoCount = widgetData.openTodoCount()
+    val showTodos = widgetData.showTodoCount()
+    val openApp = actionStartActivity(widgetData.openIntent(context))
     val copyClip = actionSendBroadcast(
         Intent(context, CopyClipReceiver::class.java).apply {
             action = EdcIntents.ACTION_COPY_CLIP
@@ -45,20 +44,39 @@ fun EdcWidgetContent(context: Context) {
             .padding(12.dp),
         verticalAlignment = Alignment.Top,
     ) {
-        Text(
-            text = "EDC pocket",
-            style = TextStyle(color = Cyan, fontSize = 12.sp),
-        )
+        Row(
+            modifier = GlanceModifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "EDC pocket",
+                style = TextStyle(color = Cyan, fontSize = 12.sp),
+            )
+            if (showTodos && openTodoCount > 0) {
+                Text(
+                    text = "$openTodoCount open",
+                    modifier = GlanceModifier.padding(start = 8.dp),
+                    style = TextStyle(color = Muted, fontSize = 11.sp),
+                )
+            }
+        }
         Text(
             text = clip?.text?.ifBlank { "Nothing on the house clipboard." }
                 ?: "Nothing on the house clipboard.",
             modifier = GlanceModifier
                 .fillMaxWidth()
-                .padding(top = 6.dp, bottom = 8.dp),
+                .padding(top = 6.dp, bottom = 8.dp)
+                .clickable(openApp),
             style = TextStyle(color = Ink, fontSize = 14.sp),
-            maxLines = 4,
+            maxLines = 6,
         )
-        val meta = clip?.from?.takeIf { it.isNotBlank() }?.let { "From $it" } ?: "Tap Open"
+        val meta = when {
+            showTodos && openTodoCount > 0 && clip?.from?.isNotBlank() == true ->
+                "From ${clip.from} · $openTodoCount on list"
+            showTodos && openTodoCount > 0 -> "$openTodoCount on the house list"
+            clip?.from?.isNotBlank() == true -> "From ${clip.from}"
+            else -> widgetData.tapAction().label
+        }
         Text(
             text = meta,
             style = TextStyle(color = Muted, fontSize = 11.sp),

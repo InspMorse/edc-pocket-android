@@ -19,6 +19,20 @@ object EdcNotifications {
         manager.createNotificationChannel(channel)
     }
 
+    fun ensurePersistentChannel(context: Context) {
+        ensureChannel(context)
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val channel = android.app.NotificationChannel(
+            EdcIntents.NOTIFICATION_CHANNEL_PERSISTENT,
+            "EDC connected preview",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = "Optional ongoing preview of the latest house clip"
+            setShowBadge(false)
+        }
+        manager.createNotificationChannel(channel)
+    }
+
     fun showNewClip(context: Context, clip: CachedClip) {
         ensureChannel(context)
         val appContext = context.applicationContext

@@ -32,17 +32,17 @@ Mike and Mhairi can read and write the **house clipboard**, manage the shared **
 
 | | |
 |---|---|
-| **Current release** | **v1.3** (Phase 8) |
-| **Shipped** | Phases **0–8** — foundation through always-in-sync |
-| **Next milestone** | Phase **9** → **1.5** |
-| **Through Phase 12** | **40** remaining items (9.1–12.10) |
+| **Current release** | **v1.5** (Phase 9) |
+| **Shipped** | Phases **0–9** — foundation through more surfaces |
+| **Next milestone** | Phase **10** → **1.7** |
+| **Through Phase 12** | **30** remaining items (10.1–12.10) |
 | **Carried forward** | 5.6 FCM push → **8.3** (needs host API) |
 
 **Branch:** `cursor/finish-edc-pocket-android-f18a` · **PR:** [#2](https://github.com/InspMorse/edc-pocket-android/pull/2)
 
 ---
 
-## Remaining roadmap (Phases 9–12)
+## Remaining roadmap (Phases 10–12)
 
 Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = after prior phase ships.
 
@@ -51,12 +51,12 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 | **6** | **1.0** | Quality, trust & release | 6.1–6.8 | **Done** |
 | **7** | 1.1–1.2 | Everyday delight | 7.1–7.10 | **Done** |
 | **8** | 1.3–1.4 | Always in sync | 8.1–8.9 (+ 5.6) | **Done** |
-| **9** | 1.5–1.6 | More surfaces | 9.1–9.10 | **Next** |
-| **10** | 1.7–1.8 | Smarter house | 10.1–10.10 | Planned |
+| **9** | 1.5–1.6 | More surfaces | 9.1–9.10 | **Done** |
+| **10** | 1.7–1.8 | Smarter house | 10.1–10.10 | **Next** |
 | **11** | 1.9–2.0 | Beyond clipboard | 11.1–11.10 | Planned |
 | **12** | 2.x | Trust at scale | 12.1–12.10 | Planned |
 
-**Spine:** `Phase 9 (1.5) → 10 → 11 → 12 (2.0)`
+**Spine:** `Phase 10 (1.7) → 11 → 12 (2.0)`
 
 **Host-dependent batches** (coordinate Everyday Clipboard host repo):
 
@@ -219,22 +219,22 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 
 ---
 
-## Phase 9 — More surfaces (**next** → 1.5–1.6)
+## Phase 9 — More surfaces (done → 1.5)
 
 **Goal:** House clipboard reachable from anywhere on the phone — not only inside the app.
 
 | # | Item | Status |
 |---|------|--------|
-| 9.1 | Widget v2 — configurable size, show open todo count, tap filter | Pending |
-| 9.2 | Lock screen widget / glance (where OS allows) | Pending |
-| 9.3 | Quick Settings tiles — open list, snap photo to Incoming | Pending |
-| 9.4 | Persistent “connected” notification with latest clip preview (optional) | Pending |
-| 9.5 | Share target v2 — remember last destination; skip chooser option | Pending |
-| 9.6 | App Actions / voice — “send to house list”, “copy house clipboard” | Pending |
-| 9.7 | Tasker / MacroDroid / automation intent API (documented) | Pending |
-| 9.8 | Wear OS tile or complication — copy latest | Pending |
-| 9.9 | NFC tag at the door — open app or copy latest | Pending |
-| 9.10 | Direct share shortcuts per session folder | Pending |
+| 9.1 | Widget v2 — configurable size, show open todo count, tap filter | Done |
+| 9.2 | Lock screen widget / glance (where OS allows) | Done |
+| 9.3 | Quick Settings tiles — open list, snap photo to Incoming | Done |
+| 9.4 | Persistent “connected” notification with latest clip preview (optional) | Done |
+| 9.5 | Share target v2 — remember last destination; skip chooser option | Done |
+| 9.6 | App Actions / voice — “send to house list”, “copy house clipboard” | Done |
+| 9.7 | Tasker / MacroDroid / automation intent API (documented) | Done · [AUTOMATION.md](AUTOMATION.md) |
+| 9.8 | Wear OS tile or complication — copy latest | Done · phone Data Layer bridge |
+| 9.9 | NFC tag at the door — open app or copy latest | Done |
+| 9.10 | Direct share shortcuts per session folder | Done |
 
 **Exit criteria:** Three one-tap paths to “copy latest” exist outside the launcher (widget, tile, voice or NFC).
 
@@ -336,20 +336,18 @@ Nothing off the table — park here until a host API or strong user pull exists.
 | **0.6** | Phase 5 | Shipped |
 | **1.0** | Phase 6 | Shipped |
 | **1.1** | Phase 7 | Shipped |
-| **1.3** | Phase 8 | **Current** |
-| **1.5–1.6** | Phase 9 | **Next** |
-| **1.7–1.8** | Phase 10 | Planned |
+| **1.3** | Phase 8 | Shipped |
+| **1.5** | Phase 9 | **Current** |
+| **1.7–1.8** | Phase 10 | **Next** |
 | **1.9–2.0** | Phase 11 | Planned |
 | **2.x** | Phase 12 | Planned |
 
 Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 
-### Full remaining checklist (9.1 → 12.10)
+### Full remaining checklist (10.1 → 12.10)
 
 <details>
-<summary>40 items — expand to scan</summary>
-
-**Phase 9:** 9.1 widget v2 · 9.2 lock screen · 9.3 QS tiles · 9.4 persistent notif · 9.5 share v2 · 9.6 voice · 9.7 Tasker API · 9.8 Wear · 9.9 NFC · 9.10 session shortcuts  
+<summary>30 items — expand to scan</summary>
 
 **Phase 10:** 10.1 multi-host · 10.2 mDNS · 10.3 MagicDNS · 10.4 QR pair · 10.5 WebView dashboard · 10.6 branding · 10.7 geofence · 10.8 guest identity · 10.9 biometric · 10.10 cert pinning  
 
@@ -395,10 +393,10 @@ Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 **Sequential spine (required order for major releases)**
 
 ```
-v1.3 (now) → Phase 9 (1.5) → 10 → 11 → 12 (2.0)
+v1.5 (now) → Phase 10 (1.7) → 11 → 12 (2.0)
 ```
 
-**Parallel tracks** — can overlap now that **1.3** shipped:
+**Parallel tracks** — can overlap now that **1.5** shipped:
 
 | Track | Phases | Focus |
 |-------|--------|--------|
@@ -408,13 +406,12 @@ v1.3 (now) → Phase 9 (1.5) → 10 → 11 → 12 (2.0)
 | **Surfaces** | 9 | Widget, tile, voice, Wear, NFC |
 | **House** | 10 | Multi-host, discovery, dashboard |
 
-**Recommended batches (Phase 9 first)**
+**Recommended batches (Phase 10 first)**
 
 | Batch | Items | Why |
 |-------|-------|-----|
-| Reach | 9.1, 9.5, 9.3 | Widget v2, share memory, extra tiles |
-| Feel | 9.4, 9.6 | Persistent notif, voice send |
-| Utility | 11.9, 11.6, 11.3 | Session gallery, scan, shopping aisles |
-| House | 10.2, 10.4 | mDNS + QR pairing *(host)* |
+| House | 10.1, 10.3, 10.5 | Multi-host, MagicDNS, dashboard WebView |
+| Discovery | 10.2, 10.4 | mDNS + QR pairing *(host)* |
+| Trust | 10.9, 10.10 | Biometric lock, cert pinning |
 
 Host-dependent unlock: **8.3–8.4**, **10.2/10.4/10.6**, and much of **11** move fastest when Everyday Clipboard grows matching APIs — coordinate both repos.

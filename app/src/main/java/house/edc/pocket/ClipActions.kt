@@ -21,7 +21,7 @@ object ClipActions {
         val snap = runCatching { client.load(base, settings.identity) }.getOrNull() ?: return null
         val entry = snap.latest ?: snap.history.firstOrNull() ?: return null
         store.save(entry)
-        EdcWidgetUpdater.updateAll(app)
+        SurfaceEffects.afterClipSaved(app, settings)
         copyPlain(app, entry.text)
         return entry.text
     }
