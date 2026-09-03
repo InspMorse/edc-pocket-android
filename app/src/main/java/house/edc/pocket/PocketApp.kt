@@ -1,0 +1,3006 @@
+package house.edc.pocket
+
+import android.Manifest
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Send
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Checklist
+import androidx.compose.material.icons.outlined.ContentCopy
+import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.Dashboard
+import androidx.compose.material.icons.outlined.PhotoCamera
+import androidx.compose.material.icons.outlined.PhotoLibrary
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.outlined.Phone
+import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.Switch
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import java.io.File
+import java.util.Locale
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+private val identities = listOf("Mike", "Mhairi")
+private val clipFilters = listOf("All", "Mike", "Mhairi", "EDC")
+private const val clipPreviewChars = 220
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+fun PocketApp(
+    settings: EdcSettings,
+    store: SettingsStore,
+    client: EdcClient,
+    syncCoordinator: SyncCoordinator,
+    syncCache: SyncCache,
+    outboxStore: OutboxStore,
+    outboxProcessor: OutboxProcessor,
+    hostConnector: HostConnector,
+    networkMonitor: NetworkMonitor,
+    connectionDoctor: ConnectionDoctor,
+    homeHintMonitor: HomeHintMonitor,
+    auditLogStore: AuditLogStore,
+    telemetryStore: TelemetryStore,
+    todoExtrasStore: TodoExtrasStore,
+    pinStore: PinStore,
+    launchAction: LaunchAction = LaunchAction.NONE,
+    launchText: String = "",
+    onLaunchActionHandled: () -> Unit = {},
+    onScanQrPair: () -> Unit = {},
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val todoExtras by todoExtrasStore.extras.collectAsState(initial = emptyMap())
+    val pinnedClipKeys by pinStore.pinnedClipKeys.collectAsState(initial = emptySet())
+    val pinnedTodoIds by pinStore.pinnedTodoIds.collectAsState(initial = emptySet())
+    val auditEntries by auditLogStore.entries.collectAsState(initial = emptyList())
+    val telemetryEvents by telemetryStore.events.collectAsState(initial = emptyList())
+    var rateLimitHint by remember { mutableStateOf<HostRateHint?>(null) }
+    var hostHealth by remember { mutableStateOf<HostHealth?>(null) }
+
+    if (!settings.onboardingComplete) {
+        EdcPocketTheme(hostAccent = parseThemeAccentFromHealth(hostHealth)) {
+            OnboardingFlow(
+                store = store,
+                client = client,
+                onComplete = { },
+            )
+        }
+        return
+    }
+
+    EdcPocketTheme(hostAccent = parseThemeAccentFromHealth(hostHealth)) {
+        val snackbar = remember { SnackbarHostState() }
+        val haptic = rememberEdcHaptic()
+        val notifPermission = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestPermission(),
+        ) { _ -> }
+        val networkKind by networkMonitor.networkKind.collectAsState(initial = NetworkKind.OTHER)
+        val outboxItems by outboxStore.items.collectAsState(initial = emptyList())
+        var tab by rememberSaveable { mutableStateOf(PocketTab.CLIP.name) }
+        val currentTab = PocketTab.entries.find { it.name == tab } ?: PocketTab.CLIP
+        var snapshot by remember { mutableStateOf(HostSnapshot()) }
+        var loading by remember { mutableStateOf(false) }
+        var status by remember { mutableStateOf<String?>(null) }
+        var error by remember { mutableStateOf<String?>(null) }
+        var stale by remember { mutableStateOf(false) }
+        var lastSyncedAt by remember { mutableStateOf<Long?>(null) }
+        var liveStreamActive by remember { mutableStateOf(false) }
+        var offlineBaseline by remember { mutableStateOf<String?>(null) }
+        var pendingCamera by remember { mutableStateOf(false) }
+        var pullRefreshing by remember { mutableStateOf(false) }
+        var urlValidationError by remember { mutableStateOf<String?>(null) }
+        var uploadProgress by remember { mutableStateOf<UploadProgress?>(null) }
+        val resumeTick = rememberResumeTick()
+        var discoveredHosts by remember { mutableStateOf<List<DiscoveredHost>>(emptyList()) }
+        var discovering by remember { mutableStateOf(false) }
+        val displayIdentity = when {
+            settings.guestActive -> "${settings.guestIdentity} (guest)"
+            else -> settings.identity
+        }
+        val enrichedTodos = remember(snapshot.todos, todoExtras) {
+            enrichTodos(snapshot.todos, todoExtras)
+        }
+        val dashboardUrl = hostHealth?.dashboardUrl?.takeIf { it.isNotBlank() }
+            ?: hostHealth?.linkTemplates?.dashboardBase?.takeIf { it.isNotBlank() }
+        val navTabs = buildList {
+            add(PocketTab.CLIP)
+            add(PocketTab.LIST)
+            add(PocketTab.SEND)
+            if (settings.showDashboardTab && dashboardUrl != null) add(PocketTab.DASHBOARD)
+            add(PocketTab.SETTINGS)
+        }
+
+        suspend fun refresh(silent: Boolean = false) {
+            val base = settings.baseUrl
+            if (base.isBlank()) {
+                error = "Set a host URL in Settings."
+                status = null
+                if (!silent) snapshot = HostSnapshot()
+                stale = false
+                lastSyncedAt = null
+                return
+            }
+            if (!silent) loading = true
+            val result = withContext(Dispatchers.IO) {
+                runCatching { syncCoordinator.sync(settings, healthHint = hostHealth) }
+            }
+            if (!silent) loading = false
+            result.fold(
+                onSuccess = { outcome ->
+                    val previousFingerprint = snapshotFingerprint(snapshot)
+                    snapshot = outcome.snapshot
+                    if (outcome.health != null) hostHealth = outcome.health
+                    stale = outcome.stale
+                    lastSyncedAt = outcome.lastSyncedAt
+                    error = if (outcome.stale) {
+                        hostFailureMessage(settings, cause = null, stale = true)
+                    } else {
+                        null
+                    }
+                    status = connectionLabel(
+                        settings = settings,
+                        stale = outcome.stale,
+                        error = error,
+                        lastSyncedAt = lastSyncedAt,
+                        homeHintMonitor = homeHintMonitor,
+                    )
+                    val entry = outcome.snapshot.latest ?: outcome.snapshot.history.firstOrNull()
+                    if (entry != null && outcome.fromNetwork) {
+                        LatestClipStore(context).save(entry)
+                        SurfaceEffects.afterClipSaved(context, settings)
+                    }
+                    if (outcome.fromNetwork && offlineBaseline != null) {
+                        val newFp = snapshotFingerprint(outcome.snapshot)
+                        if (newFp != offlineBaseline) {
+                            snackbar.showSnackbar(
+                                message = "House data changed while you were offline — review clips and list",
+                                duration = SnackbarDuration.Long,
+                            )
+                        }
+                        offlineBaseline = null
+                    }
+                    if (outcome.stale && offlineBaseline == null && outboxItems.isNotEmpty()) {
+                        offlineBaseline = previousFingerprint
+                    }
+                    if (outcome.fromNetwork) {
+                        scope.launch {
+                            telemetryStore.record(
+                                TelemetryKind.SYNC_OK,
+                                "refresh",
+                                settings.telemetryOptIn,
+                            )
+                        }
+                    }
+                    if (outcome.health != null && outcome.fromNetwork) {
+                        PushRegistration.registerIfPossible(context, client, settings, outcome.health)
+                        if (outcome.health.tlsPinSha256.isNotBlank()) {
+                            scope.launch { store.setTlsPinSha256(outcome.health.tlsPinSha256) }
+                        }
+                    }
+                    SurfaceEffects.afterSnapshot(context, outcome.snapshot, settings)
+                },
+                onFailure = {
+                    scope.launch {
+                        auditLogStore.append(
+                            kind = AuditKind.SYNC,
+                            identity = settings.effectiveIdentity,
+                            detail = it.message ?: "sync failed",
+                            success = false,
+                        )
+                        telemetryStore.record(
+                            TelemetryKind.SYNC_FAIL,
+                            it.message ?: "sync",
+                            settings.telemetryOptIn,
+                        )
+                    }
+                    val cached = withContext(Dispatchers.IO) { syncCoordinator.loadCached(settings) }
+                    if (cached != null) {
+                        snapshot = cached
+                        stale = true
+                        lastSyncedAt = withContext(Dispatchers.IO) {
+                            syncCoordinator.lastSyncedAt(settings)
+                        }
+                        error = hostFailureMessage(settings, it.message, stale = true)
+                        status = connectionLabel(settings, stale = true, error = error, lastSyncedAt = lastSyncedAt, homeHintMonitor = homeHintMonitor)
+                    } else {
+                        stale = snapshot.latest != null ||
+                            snapshot.history.isNotEmpty() ||
+                            snapshot.todos.isNotEmpty() ||
+                            snapshot.drops.isNotEmpty()
+                        error = hostFailureMessage(settings, it.message, stale = stale)
+                        status = null
+                    }
+                },
+            )
+        }
+
+        suspend fun flushOutbox(notify: Boolean = true): Int {
+            val sent = withContext(Dispatchers.IO) { outboxProcessor.flush(settings) }
+            if (sent > 0) {
+                scope.launch {
+                    auditLogStore.append(
+                        kind = AuditKind.OUTBOX,
+                        identity = settings.effectiveIdentity,
+                        detail = "sent $sent queued item(s)",
+                        success = true,
+                    )
+                    telemetryStore.record(
+                        TelemetryKind.OUTBOX_SENT,
+                        "count=$sent",
+                        settings.telemetryOptIn,
+                    )
+                }
+                refresh(silent = true)
+                if (notify) {
+                    val msg = if (sent == 1) "Sent queued item" else "Sent $sent queued items"
+                    snackbar.showSnackbar(msg)
+                }
+            }
+            return sent
+        }
+
+        suspend fun sendWithOutbox(
+            okMessage: String?,
+            enqueueItem: suspend () -> OutboxItem,
+            send: suspend () -> Unit,
+        ) {
+            val base = settings.baseUrl
+            if (base.isBlank()) {
+                error = "Set a host URL in Settings."
+                return
+            }
+            loading = true
+            val result = withContext(Dispatchers.IO) { runCatching { send() } }
+            loading = false
+            result.fold(
+                onSuccess = {
+                    error = null
+                    haptic()
+                    scope.launch {
+                        val auditKind = when {
+                            okMessage?.contains("clip", ignoreCase = true) == true -> AuditKind.SEND_CLIP
+                            okMessage?.contains("list", ignoreCase = true) == true -> AuditKind.SEND_LIST
+                            okMessage?.contains("photo", ignoreCase = true) == true ||
+                                okMessage?.contains("file", ignoreCase = true) == true -> AuditKind.UPLOAD
+                            else -> AuditKind.SYNC
+                        }
+                        auditLogStore.append(
+                            kind = auditKind,
+                            identity = settings.effectiveIdentity,
+                            detail = okMessage ?: "sent",
+                            success = true,
+                        )
+                        telemetryStore.record(
+                            TelemetryKind.CONNECT_OK,
+                            "send",
+                            settings.telemetryOptIn,
+                        )
+                    }
+                    if (okMessage != null) snackbar.showSnackbar(okMessage)
+                    refresh()
+                },
+                onFailure = {
+                    val item = withContext(Dispatchers.IO) { enqueueItem() }
+                    withContext(Dispatchers.IO) { outboxStore.enqueue(item) }
+                    scope.launch {
+                        auditLogStore.append(
+                            kind = AuditKind.OUTBOX,
+                            identity = settings.effectiveIdentity,
+                            detail = item.label(),
+                            success = false,
+                        )
+                        telemetryStore.record(
+                            TelemetryKind.OUTBOX_FAIL,
+                            item.kind.name,
+                            settings.telemetryOptIn,
+                        )
+                    }
+                    error = null
+                    snackbar.showSnackbar("Queued — will send when host is back")
+                },
+            )
+        }
+
+        suspend fun uploadRawFiles(files: List<Pair<ByteArray, String>>, session: String) {
+            if (files.isEmpty()) return
+            uploadProgress = UploadProgress(0, files.size)
+            var sent = 0
+            files.forEachIndexed { index, (bytes, name) ->
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        client.uploadRawBytes(
+                            settings.baseUrl,
+                            settings.effectiveIdentity,
+                            bytes,
+                            name,
+                            session,
+                            client.guessMime(name),
+                        )
+                    }.isSuccess
+                }
+                if (ok) sent++
+                uploadProgress = UploadProgress(index + 1, files.size)
+            }
+            uploadProgress = null
+            if (sent > 0) {
+                snackbar.showSnackbar(
+                    if (sent == 1) "File sent to Incoming" else "$sent files sent",
+                )
+                refresh()
+            }
+        }
+
+        suspend fun uploadPhotos(uris: List<Uri>, session: String) {
+            if (uris.isEmpty()) return
+            uploadProgress = UploadProgress(0, uris.size)
+            var sent = 0
+            uris.forEachIndexed { index, uri ->
+                val name = uri.lastPathSegment ?: "photo_${index + 1}.jpg"
+                val ok = withContext(Dispatchers.IO) {
+                    runCatching {
+                        client.uploadFile(
+                            settings.baseUrl,
+                            settings.effectiveIdentity,
+                            uri,
+                            name,
+                            session,
+                        )
+                    }.isSuccess
+                }
+                if (!ok) {
+                    withContext(Dispatchers.IO) {
+                        outboxStore.enqueuePhoto(context.contentResolver, uri, name, session)
+                    }
+                } else {
+                    sent++
+                }
+                uploadProgress = UploadProgress(index + 1, uris.size)
+            }
+            uploadProgress = null
+            refresh()
+            snackbar.showSnackbar(
+                when {
+                    sent == uris.size -> {
+                        if (sent == 1) "Photo sent to Incoming" else "$sent photos sent"
+                    }
+                    sent == 0 -> "Queued ${uris.size} photo(s)"
+                    else -> "Sent $sent, queued ${uris.size - sent}"
+                },
+            )
+        }
+
+        suspend fun <T> hostCall(okMessage: String?, block: () -> T) {
+            val base = settings.baseUrl
+            if (base.isBlank()) {
+                error = "Set a host URL in Settings."
+                return
+            }
+            loading = true
+            val result = withContext(Dispatchers.IO) { runCatching { block() } }
+            loading = false
+            result.fold(
+                onSuccess = {
+                    error = null
+                    rateLimitHint = null
+                    if (okMessage != null) snackbar.showSnackbar(okMessage)
+                    refresh()
+                },
+                onFailure = { err ->
+                    val rate = err as? HostRateLimitedException
+                    if (rate != null) {
+                        rateLimitHint = rate.hint
+                        scope.launch {
+                            auditLogStore.append(
+                                kind = AuditKind.RATE_LIMIT,
+                                identity = settings.effectiveIdentity,
+                                detail = rate.hint.message,
+                                success = false,
+                            )
+                            telemetryStore.record(
+                                TelemetryKind.CONNECT_FAIL,
+                                "rate_limit",
+                                settings.telemetryOptIn,
+                            )
+                        }
+                    }
+                    scope.launch {
+                        auditLogStore.append(
+                            kind = AuditKind.HOST_ERROR,
+                            identity = settings.effectiveIdentity,
+                            detail = err.message ?: "Host call failed",
+                            success = false,
+                        )
+                        telemetryStore.record(
+                            TelemetryKind.CONNECT_FAIL,
+                            err.message ?: "host_call",
+                            settings.telemetryOptIn,
+                        )
+                    }
+                    error = hostFailureMessage(settings, err.message)
+                },
+            )
+        }
+
+        suspend fun pullRefresh() {
+            pullRefreshing = true
+            refresh(silent = true)
+            flushOutbox(notify = false)
+            pullRefreshing = false
+        }
+
+        LaunchedEffect(settings.backgroundPoll, hostHealth) {
+            val mode = SyncPolicy.effectiveBackgroundPoll(settings, hostHealth)
+            PollScheduler.apply(context, mode)
+        }
+
+        LaunchedEffect(settings.baseUrl, settings.effectiveIdentity, resumeTick) {
+            refresh()
+            flushOutbox()
+        }
+
+        LaunchedEffect(networkKind, settings.autoHost, settings.preset, settings.effectiveIdentity) {
+            if (networkKind == NetworkKind.NONE) return@LaunchedEffect
+            val found = withContext(Dispatchers.IO) {
+                hostConnector.syncHost(settings, store, networkKind)
+            }
+            if (found != null) {
+                hostHealth = found.health
+                error = null
+                refresh(silent = true)
+            } else if (settings.baseUrl.isNotBlank()) {
+                val health = withContext(Dispatchers.IO) { hostConnector.reprobe(settings) }
+                if (health != null) hostHealth = health
+            }
+            flushOutbox()
+        }
+
+        LaunchedEffect(currentTab, settings.baseUrl, settings.effectiveIdentity, liveStreamActive) {
+            while (isActive) {
+                val delayMs = SyncPolicy.foregroundPollMs(currentTab, hostHealth, liveStreamActive)
+                delay(delayMs)
+                refresh(silent = true)
+            }
+        }
+
+        LaunchedEffect(settings.baseUrl, settings.effectiveIdentity, hostHealth?.capabilities?.sse) {
+            liveStreamActive = false
+            if (settings.baseUrl.isBlank()) return@LaunchedEffect
+            val stream = HostEventStream()
+            if (!stream.canUse(hostHealth)) return@LaunchedEffect
+            liveStreamActive = true
+            stream.listen(settings.baseUrl, settings.effectiveIdentity) {
+                refresh(silent = true)
+            }
+            liveStreamActive = false
+        }
+
+        LaunchedEffect(currentTab, settings.baseUrl, settings.effectiveIdentity) {
+            if (currentTab != PocketTab.SETTINGS || settings.baseUrl.isBlank()) return@LaunchedEffect
+            val health = withContext(Dispatchers.IO) {
+                runCatching { client.probeHealth(settings.baseUrl, settings.effectiveIdentity) }.getOrNull()
+            }
+            if (health != null) hostHealth = health
+        }
+
+        LaunchedEffect(launchAction, settings.baseUrl, settings.effectiveIdentity, launchText) {
+            if (launchAction == LaunchAction.NONE) return@LaunchedEffect
+            when (launchAction) {
+                LaunchAction.OPEN_SEND -> tab = PocketTab.SEND.name
+                LaunchAction.OPEN_SEND_CAMERA -> {
+                    tab = PocketTab.SEND.name
+                    pendingCamera = true
+                }
+                LaunchAction.OPEN_LIST -> tab = PocketTab.LIST.name
+                LaunchAction.OPEN_CLIP -> tab = PocketTab.CLIP.name
+                LaunchAction.COPY_LATEST -> {
+                    val result = withContext(Dispatchers.IO) {
+                        runCatching { ClipActions.copyHouseClipboard(context) }
+                    }
+                    if (result.getOrNull().isNullOrBlank()) {
+                        error = "Nothing to copy"
+                        snackbar.showSnackbar("Nothing on the house clipboard")
+                    } else {
+                        haptic()
+                        snackbar.showSnackbar("Copied latest clip")
+                    }
+                }
+                LaunchAction.SEND_TO_CLIP -> {
+                    val text = launchText
+                    if (text.isBlank()) {
+                        snackbar.showSnackbar("No text to send")
+                    } else {
+                        sendWithOutbox(
+                            okMessage = "Sent to clipboard",
+                            enqueueItem = { OutboxItem(kind = OutboxKind.CLIP, text = text) },
+                            send = { client.sendText(settings.baseUrl, settings.effectiveIdentity, text) },
+                        )
+                    }
+                }
+                LaunchAction.SEND_TO_LIST -> {
+                    val text = launchText
+                    if (text.isBlank()) {
+                        tab = PocketTab.SEND.name
+                        snackbar.showSnackbar("Type on the Send tab or share text from another app")
+                    } else {
+                        sendWithOutbox(
+                            okMessage = "Added to list",
+                            enqueueItem = { OutboxItem(kind = OutboxKind.LIST, text = text) },
+                            send = { client.addTodo(settings.baseUrl, settings.effectiveIdentity, text) },
+                        )
+                    }
+                }
+                LaunchAction.NONE -> Unit
+            }
+            onLaunchActionHandled()
+        }
+
+        Scaffold(
+            modifier = Modifier.imePadding(),
+            containerColor = EdcBg,
+            snackbarHost = { SnackbarHost(snackbar) },
+            topBar = {
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            val logo = hostHealth?.logoUrl?.takeIf { it.isNotBlank() }
+                            if (logo != null) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context).data(logo).crossfade(true).build(),
+                                    contentDescription = hostHealth?.hostName ?: "House",
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .padding(end = 8.dp),
+                                    contentScale = ContentScale.Fit,
+                                )
+                            }
+                            Column {
+                                Text(hostHealth?.hostName?.ifBlank { "EDC pocket" } ?: "EDC pocket")
+                                Text(
+                                    text = displayIdentity + " · " + connectionLabel(
+                                        settings,
+                                        stale,
+                                        error,
+                                        lastSyncedAt,
+                                        homeHintMonitor,
+                                    ),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = EdcMuted,
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        if (loading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .padding(end = 8.dp)
+                                    .size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = EdcAccent,
+                            )
+                        }
+                        IconButton(onClick = { scope.launch { refresh() } }) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = "Refresh")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = EdcBg,
+                        titleContentColor = EdcInk,
+                        actionIconContentColor = EdcCyan,
+                    ),
+                )
+            },
+            bottomBar = {
+                NavigationBar(containerColor = EdcSurface) {
+                    navTabs.forEach { item ->
+                        NavigationBarItem(
+                            selected = currentTab == item,
+                            onClick = { tab = item.name },
+                            icon = {
+                                Icon(
+                                    imageVector = when (item) {
+                                        PocketTab.CLIP -> Icons.Outlined.ContentPaste
+                                        PocketTab.LIST -> Icons.Outlined.Checklist
+                                        PocketTab.SEND -> Icons.AutoMirrored.Outlined.Send
+                                        PocketTab.DASHBOARD -> Icons.Outlined.Dashboard
+                                        PocketTab.SETTINGS -> Icons.Outlined.Settings
+                                    },
+                                    contentDescription = item.label,
+                                )
+                            },
+                            label = { Text(item.label) },
+                        )
+                    }
+                }
+            },
+        ) { padding ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+            ) {
+                if (loading) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = EdcCyan,
+                    )
+                }
+                val banner = when {
+                    stale && error != null -> {
+                        val age = formatStaleness(lastSyncedAt)
+                        if (age != null) "$error · $age" else "$error · showing last known"
+                    }
+                    error != null -> error
+                    outboxItems.isNotEmpty() -> "${outboxItems.size} send(s) queued"
+                    else -> status
+                }
+                if (banner != null) {
+                    Text(
+                        text = banner,
+                        color = when {
+                            stale -> Color(0xFFFFBB33)
+                            error != null -> MaterialTheme.colorScheme.error
+                            else -> EdcMuted
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+                if (settings.profiles.size > 1) {
+                    FlowRow(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        settings.profiles.forEach { profile ->
+                            FilterChip(
+                                selected = settings.activeProfileId == profile.id,
+                                onClick = { scope.launch { store.setActiveProfileId(profile.id) } },
+                                label = { Text(profile.name) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = Color(0xFF0E3A43),
+                                    selectedLabelColor = EdcAccent,
+                                ),
+                            )
+                        }
+                    }
+                }
+                val caps = FeatureFlags.effectiveCapabilities(hostHealth)
+                val featureFlagNotes = FeatureFlags.disabledSummary(hostHealth)
+                val configuration = LocalConfiguration.current
+                val wideLayout = configuration.screenWidthDp >= 840
+                if (wideLayout && (currentTab == PocketTab.CLIP || currentTab == PocketTab.LIST)) {
+                    Row(Modifier.fillMaxSize()) {
+                        ClipPane(
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            latest = snapshot.latest,
+                            history = snapshot.history,
+                            filter = settings.clipFilter,
+                            clipboardEnabled = caps.clipboard,
+                            onFilterChange = { scope.launch { store.setClipFilter(it) } },
+                            isRefreshing = pullRefreshing,
+                            onRefresh = { scope.launch { pullRefresh() } },
+                            onCopy = { text ->
+                                val clipboard = context.getSystemService(ClipboardManager::class.java)
+                                clipboard.setPrimaryClip(ClipData.newPlainText("EDC", text))
+                                haptic()
+                                scope.launch { snackbar.showSnackbar("Copied") }
+                            },
+                            onShare = { text ->
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, text)
+                                }
+                                context.startActivity(Intent.createChooser(send, "Share clip"))
+                            },
+                            onOpenUrl = { openUrl(context, it) },
+                            onOpenDashboard = { entry ->
+                                HostLinks.clipDashboardUrl(hostHealth, entry)?.let { openUrl(context, it) }
+                                    ?: scope.launch { snackbar.showSnackbar("No dashboard link for this clip") }
+                            },
+                            showDashboardLinks = caps.dashboard,
+                            pinnedClipKeys = pinnedClipKeys,
+                            onTogglePin = { entry ->
+                                scope.launch {
+                                    pinStore.toggleClip(entry)
+                                    haptic()
+                                }
+                            },
+                            onSend = { text ->
+                                scope.launch {
+                                    sendWithOutbox(
+                                        okMessage = "Sent to clipboard",
+                                        enqueueItem = {
+                                            OutboxItem(kind = OutboxKind.CLIP, text = text)
+                                        },
+                                        send = {
+                                            client.sendText(settings.baseUrl, settings.effectiveIdentity, text)
+                                        },
+                                    )
+                                }
+                            },
+                        )
+                        VerticalDivider()
+                        ListPane(
+                            modifier = Modifier.weight(1f).fillMaxHeight(),
+                            todos = enrichedTodos,
+                            latestClipUrl = firstUrl(snapshot.latest?.text.orEmpty()).orEmpty(),
+                            todoExtras = todoExtras,
+                            todoExtrasStore = todoExtrasStore,
+                            client = client,
+                            settings = settings,
+                            listEnabled = caps.todo,
+                            shareListEnabled = caps.todoText,
+                            deleteEnabled = caps.todoDelete,
+                            showDashboardLinks = caps.dashboard,
+                            sortMode = settings.listSortMode,
+                            personFilter = settings.listPersonFilter,
+                            identity = settings.effectiveIdentity,
+                            pinnedTodoIds = pinnedTodoIds,
+                            onSortChange = { scope.launch { store.setListSortMode(it) } },
+                            onPersonFilterChange = { scope.launch { store.setListPersonFilter(it) } },
+                            onTogglePin = { id ->
+                                scope.launch {
+                                    pinStore.toggleTodo(id)
+                                    haptic()
+                                }
+                            },
+                            isRefreshing = pullRefreshing,
+                            onRefresh = { scope.launch { pullRefresh() } },
+                            onAdd = { text ->
+                                scope.launch {
+                                    sendWithOutbox(
+                                        okMessage = "Added to list",
+                                        enqueueItem = {
+                                            OutboxItem(kind = OutboxKind.LIST, text = text)
+                                        },
+                                        send = {
+                                            client.addTodo(settings.baseUrl, settings.effectiveIdentity, text)
+                                        },
+                                    )
+                                }
+                            },
+                            onToggle = { item ->
+                                val next = !item.done
+                                haptic()
+                                snapshot = snapshot.copy(
+                                    todos = snapshot.todos.map {
+                                        if (it.id == item.id) it.copy(done = next) else it
+                                    },
+                                )
+                                scope.launch {
+                                    hostCall(null) {
+                                        client.toggleTodo(
+                                            settings.baseUrl,
+                                            settings.effectiveIdentity,
+                                            item.id,
+                                            next,
+                                        )
+                                    }
+                                    if (next) {
+                                        val rule = RecurrenceRule.from(item.recurrence)
+                                        val followUp = recurrenceFollowUpText(item.text, rule)
+                                        if (followUp != null) {
+                                            sendWithOutbox(
+                                                okMessage = null,
+                                                enqueueItem = {
+                                                    OutboxItem(kind = OutboxKind.LIST, text = followUp)
+                                                },
+                                                send = {
+                                                    client.addTodo(
+                                                        settings.baseUrl,
+                                                        settings.effectiveIdentity,
+                                                        followUp,
+                                                    )
+                                                },
+                                            )
+                                        }
+                                    }
+                                }
+                            },
+                            onDelete = { item ->
+                                scope.launch {
+                                    haptic()
+                                    val previous = snapshot.todos
+                                    snapshot = snapshot.copy(
+                                        todos = snapshot.todos.filter { it.id != item.id },
+                                    )
+                                    val undo = snackbar.showSnackbar(
+                                        message = "Removed",
+                                        actionLabel = "Undo",
+                                        duration = SnackbarDuration.Short,
+                                    )
+                                    if (undo == SnackbarResult.ActionPerformed) {
+                                        snapshot = snapshot.copy(todos = previous)
+                                        return@launch
+                                    }
+                                    hostCall(null) {
+                                        client.deleteTodo(
+                                            settings.baseUrl,
+                                            settings.effectiveIdentity,
+                                            item.id,
+                                        )
+                                    }
+                                }
+                            },
+                            onShareList = {
+                                scope.launch {
+                                    val base = settings.baseUrl
+                                    if (base.isBlank()) {
+                                        error = "Set a host URL in Settings."
+                                        return@launch
+                                    }
+                                    val text = withContext(Dispatchers.IO) {
+                                        client.todoPlainText(base, settings.effectiveIdentity)
+                                    }
+                                    val send = Intent(Intent.ACTION_SEND).apply {
+                                        type = "text/plain"
+                                        putExtra(Intent.EXTRA_TEXT, text)
+                                    }
+                                    context.startActivity(Intent.createChooser(send, "Share list"))
+                                }
+                            },
+                            onOpenDashboard = { item ->
+                                HostLinks.todoDashboardUrl(hostHealth, item)?.let { openUrl(context, it) }
+                                    ?: scope.launch { snackbar.showSnackbar("No dashboard link for this item") }
+                            },
+                        )
+                    }
+                } else when (currentTab) {
+                    PocketTab.CLIP -> ClipPane(
+                        latest = snapshot.latest,
+                        history = snapshot.history,
+                        filter = settings.clipFilter,
+                        clipboardEnabled = caps.clipboard,
+                        onFilterChange = { scope.launch { store.setClipFilter(it) } },
+                        isRefreshing = pullRefreshing,
+                        onRefresh = { scope.launch { pullRefresh() } },
+                        onCopy = { text ->
+                            val clipboard = context.getSystemService(ClipboardManager::class.java)
+                            clipboard.setPrimaryClip(ClipData.newPlainText("EDC", text))
+                            haptic()
+                            scope.launch { snackbar.showSnackbar("Copied") }
+                        },
+                        onShare = { text ->
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            }
+                            context.startActivity(Intent.createChooser(send, "Share clip"))
+                        },
+                        onOpenUrl = { openUrl(context, it) },
+                        onOpenDashboard = { entry ->
+                            HostLinks.clipDashboardUrl(hostHealth, entry)?.let { openUrl(context, it) }
+                                ?: scope.launch { snackbar.showSnackbar("No dashboard link for this clip") }
+                        },
+                        showDashboardLinks = caps.dashboard,
+                        pinnedClipKeys = pinnedClipKeys,
+                        onTogglePin = { entry ->
+                            scope.launch {
+                                pinStore.toggleClip(entry)
+                                haptic()
+                            }
+                        },
+                        onSend = { text ->
+                            scope.launch {
+                                sendWithOutbox(
+                                    okMessage = "Sent to clipboard",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.CLIP, text = text)
+                                    },
+                                    send = {
+                                        client.sendText(settings.baseUrl, settings.effectiveIdentity, text)
+                                    },
+                                )
+                            }
+                        },
+                    )
+                    PocketTab.LIST -> ListPane(
+                        todos = enrichedTodos,
+                        latestClipUrl = firstUrl(snapshot.latest?.text.orEmpty()).orEmpty(),
+                        todoExtras = todoExtras,
+                        todoExtrasStore = todoExtrasStore,
+                        client = client,
+                        settings = settings,
+                        listEnabled = caps.todo,
+                        shareListEnabled = caps.todoText,
+                        deleteEnabled = caps.todoDelete,
+                        showDashboardLinks = caps.dashboard,
+                        sortMode = settings.listSortMode,
+                        personFilter = settings.listPersonFilter,
+                        identity = settings.effectiveIdentity,
+                        pinnedTodoIds = pinnedTodoIds,
+                        onSortChange = { scope.launch { store.setListSortMode(it) } },
+                        onPersonFilterChange = { scope.launch { store.setListPersonFilter(it) } },
+                        onTogglePin = { id ->
+                            scope.launch {
+                                pinStore.toggleTodo(id)
+                                haptic()
+                            }
+                        },
+                        isRefreshing = pullRefreshing,
+                        onRefresh = { scope.launch { pullRefresh() } },
+                        onAdd = { text ->
+                            scope.launch {
+                                sendWithOutbox(
+                                    okMessage = "Added to list",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.LIST, text = text)
+                                    },
+                                    send = {
+                                        client.addTodo(settings.baseUrl, settings.effectiveIdentity, text)
+                                    },
+                                )
+                            }
+                        },
+                        onToggle = { item ->
+                            val next = !item.done
+                            haptic()
+                            snapshot = snapshot.copy(
+                                todos = snapshot.todos.map {
+                                    if (it.id == item.id) it.copy(done = next) else it
+                                },
+                            )
+                            scope.launch {
+                                hostCall(null) {
+                                    client.toggleTodo(
+                                        settings.baseUrl,
+                                        settings.effectiveIdentity,
+                                        item.id,
+                                        next,
+                                    )
+                                }
+                                if (next) {
+                                    val rule = RecurrenceRule.from(item.recurrence)
+                                    val followUp = recurrenceFollowUpText(item.text, rule)
+                                    if (followUp != null) {
+                                        sendWithOutbox(
+                                            okMessage = null,
+                                            enqueueItem = {
+                                                OutboxItem(kind = OutboxKind.LIST, text = followUp)
+                                            },
+                                            send = {
+                                                client.addTodo(
+                                                    settings.baseUrl,
+                                                    settings.effectiveIdentity,
+                                                    followUp,
+                                                )
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        },
+                        onDelete = { item ->
+                            scope.launch {
+                                haptic()
+                                val previous = snapshot.todos
+                                snapshot = snapshot.copy(
+                                    todos = snapshot.todos.filter { it.id != item.id },
+                                )
+                                val undo = snackbar.showSnackbar(
+                                    message = "Removed",
+                                    actionLabel = "Undo",
+                                    duration = SnackbarDuration.Short,
+                                )
+                                if (undo == SnackbarResult.ActionPerformed) {
+                                    snapshot = snapshot.copy(todos = previous)
+                                    return@launch
+                                }
+                                hostCall(null) {
+                                    client.deleteTodo(
+                                        settings.baseUrl,
+                                        settings.effectiveIdentity,
+                                        item.id,
+                                    )
+                                }
+                            }
+                        },
+                        onShareList = {
+                            scope.launch {
+                                val base = settings.baseUrl
+                                if (base.isBlank()) {
+                                    error = "Set a host URL in Settings."
+                                    return@launch
+                                }
+                                val text = withContext(Dispatchers.IO) {
+                                    client.todoPlainText(base, settings.effectiveIdentity)
+                                }
+                                val send = Intent(Intent.ACTION_SEND).apply {
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_TEXT, text)
+                                }
+                                context.startActivity(Intent.createChooser(send, "Share list"))
+                            }
+                        },
+                        onOpenDashboard = { item ->
+                            HostLinks.todoDashboardUrl(hostHealth, item)?.let { openUrl(context, it) }
+                                ?: scope.launch { snackbar.showSnackbar("No dashboard link for this item") }
+                        },
+                    )
+                    PocketTab.SEND -> SendPane(
+                        drops = snapshot.drops,
+                        baseUrl = settings.baseUrl,
+                        uploadProgress = uploadProgress,
+                        clipEnabled = caps.clipboard,
+                        listEnabled = caps.todo,
+                        uploadEnabled = caps.upload,
+                        sessionUploadEnabled = caps.sessionUpload,
+                        incomingEnabled = caps.incoming,
+                        incomingUrl = { drop -> client.incomingOpenUrl(settings.baseUrl, drop) },
+                        onSendClip = { text ->
+                            scope.launch {
+                                sendWithOutbox(
+                                    okMessage = "Sent to clipboard",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.CLIP, text = text)
+                                    },
+                                    send = {
+                                        client.sendText(settings.baseUrl, settings.effectiveIdentity, text)
+                                    },
+                                )
+                            }
+                        },
+                        onSendList = { text ->
+                            scope.launch {
+                                sendWithOutbox(
+                                    okMessage = "Added to list",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.LIST, text = text)
+                                    },
+                                    send = {
+                                        client.addTodo(settings.baseUrl, settings.effectiveIdentity, text)
+                                    },
+                                )
+                            }
+                        },
+                        onUpload = { uri, name, session ->
+                            scope.launch { uploadPhotos(listOf(uri), session) }
+                        },
+                        onUploadMultiple = { uris, session ->
+                            scope.launch { uploadPhotos(uris, session) }
+                        },
+                        onUploadBytes = { bytes, name, session ->
+                            scope.launch { uploadRawFiles(listOf(bytes to name), session) }
+                        },
+                        onBarcodeScanned = { code ->
+                            scope.launch {
+                                val trimmed = code.trim()
+                                if (trimmed.isBlank()) return@launch
+                                sendWithOutbox(
+                                    okMessage = "Sent scan to clipboard",
+                                    enqueueItem = {
+                                        OutboxItem(kind = OutboxKind.CLIP, text = trimmed)
+                                    },
+                                    send = {
+                                        client.sendText(
+                                            settings.baseUrl,
+                                            settings.effectiveIdentity,
+                                            trimmed,
+                                        )
+                                    },
+                                )
+                            }
+                        },
+                        onBulkDownload = { drops ->
+                            scope.launch {
+                                loading = true
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val files = drops.mapNotNull { drop ->
+                                            val (bytes, _) = client.downloadIncoming(
+                                                settings.baseUrl,
+                                                settings.effectiveIdentity,
+                                                drop,
+                                            )
+                                            drop.name to bytes
+                                        }
+                                        buildIncomingZip(files)
+                                    }
+                                }
+                                loading = false
+                                result.fold(
+                                    onSuccess = { zip ->
+                                        IncomingFiles.shareBytes(
+                                            context,
+                                            "edc-incoming.zip",
+                                            zip,
+                                            "application/zip",
+                                        )
+                                    },
+                                    onFailure = {
+                                        snackbar.showSnackbar(it.message ?: "Download failed")
+                                    },
+                                )
+                            }
+                        },
+                        onBulkDelete = { drops ->
+                            scope.launch {
+                                hostCall("Removed ${drops.size} files") {
+                                    client.deleteIncomingMany(
+                                        settings.baseUrl,
+                                        settings.effectiveIdentity,
+                                        drops,
+                                    )
+                                }
+                                refresh()
+                            }
+                        },
+                        onOpenDrop = { drop ->
+                            val url = client.incomingOpenUrl(settings.baseUrl, drop)
+                            if (url != null) openUrl(context, url) else scope.launch {
+                                snackbar.showSnackbar("No download link for this file")
+                            }
+                        },
+                        onShareDrop = { drop ->
+                            scope.launch {
+                                loading = true
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val (bytes, mime) = client.downloadIncoming(
+                                            settings.baseUrl,
+                                            settings.effectiveIdentity,
+                                            drop,
+                                        )
+                                        IncomingFiles.shareBytes(context, drop.name, bytes, mime)
+                                    }
+                                }
+                                loading = false
+                                result.onFailure {
+                                    snackbar.showSnackbar(it.message ?: "Share failed")
+                                }
+                            }
+                        },
+                        onSaveDrop = { drop ->
+                            scope.launch {
+                                loading = true
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        val (bytes, mime) = client.downloadIncoming(
+                                            settings.baseUrl,
+                                            settings.effectiveIdentity,
+                                            drop,
+                                        )
+                                        IncomingFiles.saveToDevice(context, drop.name, bytes, mime)
+                                    }
+                                }
+                                loading = false
+                                result.fold(
+                                    onSuccess = { snackbar.showSnackbar("Saved to device") },
+                                    onFailure = {
+                                        snackbar.showSnackbar(it.message ?: "Save failed")
+                                    },
+                                )
+                            }
+                        },
+                        requestCamera = pendingCamera,
+                        onCameraHandled = { pendingCamera = false },
+                    )
+                    PocketTab.DASHBOARD -> {
+                        val url = dashboardUrl.orEmpty()
+                        if (url.isBlank()) {
+                            EmptyHint(
+                                text = "No dashboard URL from the host yet.",
+                                modifier = Modifier.padding(16.dp),
+                            )
+                        } else {
+                            DashboardPane(url = url, identity = settings.effectiveIdentity)
+                        }
+                    }
+                    PocketTab.SETTINGS -> SettingsPane(
+                        settings = settings,
+                        store = store,
+                        onIdentity = { scope.launch { store.setIdentity(it) } },
+                        onPreset = { preset ->
+                            scope.launch {
+                                store.setPreset(preset)
+                                when (preset) {
+                                    HostPreset.LAN -> store.setActiveProfileId("home")
+                                    HostPreset.TAILSCALE -> store.setActiveProfileId("away")
+                                    HostPreset.CUSTOM -> Unit
+                                }
+                            }
+                        },
+                        onProbe = {
+                            scope.launch {
+                                val base = settings.baseUrl
+                                if (base.isBlank()) {
+                                    error = "Set a host URL first."
+                                    return@launch
+                                }
+                                loading = true
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching { client.probeHealth(base, settings.effectiveIdentity) }
+                                }
+                                loading = false
+                                result.fold(
+                                    onSuccess = {
+                                        error = null
+                                        hostHealth = it
+                                        status = it.summary()
+                                        snackbar.showSnackbar(it.summary())
+                                    },
+                                    onFailure = {
+                                        error = hostFailureMessage(settings, it.message)
+                                    },
+                                )
+                            }
+                        },
+                        onFindHost = {
+                            scope.launch {
+                                loading = true
+                                val found = withContext(Dispatchers.IO) {
+                                    client.findReachableHost(settings, settings.effectiveIdentity)
+                                }
+                                loading = false
+                                if (found == null) {
+                                    error = "No host answered on Home or Away."
+                                    return@launch
+                                }
+                                found.preset?.let { store.rememberWorkingPreset(it) }
+                                error = null
+                                hostHealth = found.health
+                                status = found.health.summary() + " · ${found.baseUrl}"
+                                snackbar.showSnackbar("Using ${found.preset?.label ?: "host"}")
+                                refresh()
+                            }
+                        },
+                        hostHealth = hostHealth,
+                        outboxItems = outboxItems,
+                        autoHost = settings.autoHost,
+                        onAutoHost = { scope.launch { store.setAutoHost(it) } },
+                        backgroundPoll = settings.backgroundPoll,
+                        onBackgroundPoll = { mode ->
+                            scope.launch { store.setBackgroundPoll(mode) }
+                            PollScheduler.apply(context, mode)
+                            if (mode != BackgroundPollMode.OFF && Build.VERSION.SDK_INT >= 33) {
+                                notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                        },
+                        urlValidationError = urlValidationError,
+                        onCustomUrl = { raw ->
+                            val err = validateHostUrl(raw)
+                            if (err != null) {
+                                urlValidationError = err
+                            } else {
+                                urlValidationError = null
+                                scope.launch { store.setCustomUrl(raw) }
+                            }
+                        },
+                        onFlushOutbox = { scope.launch { flushOutbox() } },
+                        onClearOutbox = { scope.launch { outboxStore.clear() } },
+                        onOpenDashboard = {
+                            val url = hostHealth?.dashboardUrl?.takeIf { it.isNotBlank() }
+                            if (url != null) openUrl(context, url) else scope.launch {
+                                snackbar.showSnackbar("No dashboard URL from host")
+                            }
+                        },
+                        useHttps = settings.useHttps,
+                        onUseHttps = { scope.launch { store.setUseHttps(it) } },
+                        connectionDoctor = connectionDoctor,
+                        onScanQrPair = onScanQrPair,
+                        discoveredHosts = discoveredHosts,
+                        discovering = discovering,
+                        onDiscoverHosts = {
+                            scope.launch {
+                                discovering = true
+                                discoveredHosts = withContext(Dispatchers.IO) {
+                                    EdcDiscovery(context).discover()
+                                }
+                                discovering = false
+                            }
+                        },
+                        onSelectDiscovered = { host ->
+                            scope.launch {
+                                val id = "discovered_${host.baseUrl.hashCode()}"
+                                val updated = settings.profiles.filter { it.id != id } + HostProfile(
+                                    id = id,
+                                    name = host.name,
+                                    url = host.baseUrl,
+                                )
+                                store.setProfiles(updated)
+                                store.setActiveProfileId(id)
+                                refresh()
+                            }
+                        },
+                        auditEntries = auditEntries,
+                        telemetrySummaryText = telemetrySummary(telemetryEvents),
+                        rateLimitHint = rateLimitHint ?: hostHealth?.rateLimitHint
+                            ?.takeIf { it.isNotBlank() }
+                            ?.let { HostRateHint(it) },
+                        featureFlagNotes = featureFlagNotes,
+                        onTelemetryOptIn = { scope.launch { store.setTelemetryOptIn(it) } },
+                        onExportData = {
+                            val json = DataExport.buildJson(
+                                context = context,
+                                settings = settings,
+                                syncCache = syncCache,
+                                auditLog = auditLogStore,
+                                telemetry = telemetryStore,
+                                outbox = outboxStore,
+                            )
+                            DataExport.shareJson(context, json)
+                            snackbar.showSnackbar("Export ready to share")
+                        },
+                        onExportAudit = { copyAuditLog(context, auditEntries) },
+                        onClearAudit = { scope.launch { auditLogStore.clear() } },
+                        onResetApp = {
+                            AppReset.resetAll(
+                                context = context,
+                                store = store,
+                                outbox = outboxStore,
+                                auditLog = auditLogStore,
+                                telemetry = telemetryStore,
+                                syncCache = syncCache,
+                                pinStore = pinStore,
+                                todoExtras = todoExtrasStore,
+                                settings = settings,
+                            )
+                            snackbar.showSnackbar("App data cleared")
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun rememberResumeTick(): Int {
+    var tick by remember { mutableIntStateOf(0) }
+    val owner = LocalLifecycleOwner.current
+    DisposableEffect(owner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) tick += 1
+        }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
+    return tick
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun ClipPane(
+    modifier: Modifier = Modifier,
+    latest: ClipEntry?,
+    history: List<ClipEntry>,
+    filter: String,
+    clipboardEnabled: Boolean,
+    onFilterChange: (String) -> Unit,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    onCopy: (String) -> Unit,
+    onShare: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onOpenDashboard: (ClipEntry) -> Unit,
+    showDashboardLinks: Boolean,
+    pinnedClipKeys: Set<String>,
+    onTogglePin: (ClipEntry) -> Unit,
+    onSend: (String) -> Unit,
+) {
+    var draft by rememberSaveable { mutableStateOf("") }
+    var search by rememberSaveable { mutableStateOf("") }
+    fun matchesSearch(entry: ClipEntry): Boolean =
+        search.isBlank() || entry.text.contains(search, ignoreCase = true)
+    val sortedHistory = sortClipHistory(
+        history.filter { entry ->
+            (filter == "All" || entry.from.equals(filter, ignoreCase = true)) && matchesSearch(entry)
+        },
+        pinnedClipKeys,
+    ).let { list ->
+        if (latest == null) list
+        else list.filter { it.id != latest.id || it.text != latest.text }
+    }
+    val showLatest = latest != null &&
+        (filter == "All" || latest.from.equals(filter, ignoreCase = true)) &&
+        matchesSearch(latest)
+    Column(modifier = modifier.fillMaxSize()) {
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            singleLine = true,
+            placeholder = { Text("Search clips") },
+            leadingIcon = { Icon(Icons.Outlined.Search, contentDescription = null) },
+        )
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            clipFilters.forEach { name ->
+                FilterChip(
+                    selected = filter == name,
+                    onClick = { onFilterChange(name) },
+                    label = { Text(name) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.weight(1f),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+            item {
+                SectionLabel("Latest")
+                Spacer(Modifier.height(8.dp))
+                if (!showLatest) {
+                    EmptyHint(clipEmptyMessage(search, filter))
+                } else {
+                    SwipeClipRow(
+                        onCopy = { onCopy(latest!!.text) },
+                        onShare = { onShare(latest!!.text) },
+                        onDashboard = if (showDashboardLinks) {
+                            { onOpenDashboard(latest!!) }
+                        } else {
+                            null
+                        },
+                    ) {
+                        ClipCard(
+                            entry = latest!!,
+                            featured = true,
+                            isPinned = PinStore.clipKey(latest!!) in pinnedClipKeys,
+                            onTogglePin = { onTogglePin(latest!!) },
+                            onCopy = onCopy,
+                            onShare = onShare,
+                            onOpenUrl = onOpenUrl,
+                            onOpenDashboard = if (showDashboardLinks) onOpenDashboard else null,
+                        )
+                    }
+                }
+            }
+            if (sortedHistory.isNotEmpty()) {
+                item { SectionLabel("History") }
+                items(sortedHistory, key = { it.id + it.ts }) { entry ->
+                    SwipeClipRow(
+                        onCopy = { onCopy(entry.text) },
+                        onShare = { onShare(entry.text) },
+                        onDashboard = if (showDashboardLinks) {
+                            { onOpenDashboard(entry) }
+                        } else {
+                            null
+                        },
+                    ) {
+                        ClipCard(
+                            entry = entry,
+                            featured = false,
+                            isPinned = PinStore.clipKey(entry) in pinnedClipKeys,
+                            onTogglePin = { onTogglePin(entry) },
+                            onCopy = onCopy,
+                            onShare = onShare,
+                            onOpenUrl = onOpenUrl,
+                            onOpenDashboard = if (showDashboardLinks) onOpenDashboard else null,
+                        )
+                    }
+                }
+            }
+        }
+        }
+        if (clipboardEnabled) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            SendField(
+                value = draft,
+                onValueChange = { draft = it },
+                placeholder = "Type to send — manual only",
+                actionLabel = "Send",
+                onAction = {
+                    val text = draft.trim()
+                    if (text.isNotEmpty()) {
+                        onSend(text)
+                        draft = ""
+                    }
+                },
+            )
+        } else {
+            EmptyHint(
+                "House clipboard is read-only on this host.",
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun ListPane(
+    modifier: Modifier = Modifier,
+    todos: List<TodoItem>,
+    latestClipUrl: String,
+    todoExtras: Map<String, TodoExtra>,
+    todoExtrasStore: TodoExtrasStore,
+    client: EdcClient,
+    settings: EdcSettings,
+    listEnabled: Boolean,
+    shareListEnabled: Boolean,
+    deleteEnabled: Boolean,
+    showDashboardLinks: Boolean,
+    sortMode: ListSortMode,
+    personFilter: ListPersonFilter,
+    identity: String,
+    pinnedTodoIds: Set<String>,
+    onSortChange: (ListSortMode) -> Unit,
+    onPersonFilterChange: (ListPersonFilter) -> Unit,
+    onTogglePin: (String) -> Unit,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    onAdd: (String) -> Unit,
+    onToggle: (TodoItem) -> Unit,
+    onDelete: (TodoItem) -> Unit,
+    onShareList: () -> Unit,
+    onOpenDashboard: (TodoItem) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val listContext = LocalContext.current
+    var draft by rememberSaveable { mutableStateOf("") }
+    var editingTodo by remember { mutableStateOf<TodoItem?>(null) }
+    val filtered = filterTodosByPerson(todos, personFilter, identity)
+    val sorted = sortTodos(filtered, sortMode, pinnedTodoIds, identity)
+    val open = sorted.filter { !it.done }
+    val done = sorted.filter { it.done }
+    editingTodo?.let { item ->
+        TodoExtraEditorDialog(
+            item = item,
+            extra = todoExtras[item.id] ?: TodoExtra(),
+            latestClipUrl = latestClipUrl,
+            onDismiss = { editingTodo = null },
+            onSave = { extra ->
+                scope.launch {
+                    todoExtrasStore.save(item.id, extra)
+                    withContext(Dispatchers.IO) {
+                        runCatching {
+                            client.updateTodoMeta(
+                                settings.baseUrl,
+                                settings.effectiveIdentity,
+                                item.id,
+                                note = extra.note,
+                                dueDate = extra.dueDate,
+                                category = extra.category,
+                                linkedClipUrl = extra.linkedClipUrl,
+                            )
+                        }
+                    }
+                }
+                editingTodo = null
+            },
+        )
+    }
+    Column(modifier = modifier.fillMaxSize()) {
+        if (listEnabled) {
+            SendField(
+                value = draft,
+                onValueChange = { draft = it },
+                placeholder = "Add to shopping / to-do",
+                actionLabel = "Add",
+                icon = Icons.Outlined.Add,
+                onAction = {
+                    val text = draft.trim()
+                    if (text.isNotEmpty()) {
+                        onAdd(text)
+                        draft = ""
+                    }
+                },
+            )
+        } else {
+            EmptyHint(
+                "Shared list is unavailable on this host.",
+                modifier = Modifier.padding(16.dp),
+            )
+        }
+        if (todos.isNotEmpty() && shareListEnabled) {
+            OutlinedButton(
+                onClick = onShareList,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            ) {
+                Icon(Icons.Outlined.Share, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Copy / share list")
+            }
+        }
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ListSortMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = sortMode == mode,
+                    onClick = { onSortChange(mode) },
+                    label = { Text(mode.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        FlowRow(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            ListPersonFilter.entries.forEach { mode ->
+                FilterChip(
+                    selected = personFilter == mode,
+                    onClick = { onPersonFilterChange(mode) },
+                    label = { Text(if (mode == ListPersonFilter.MINE) identity else mode.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.weight(1f),
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+            if (todos.isEmpty()) {
+                item { EmptyHint(listEmptyMessage(personFilter, identity)) }
+            }
+            if (sortMode == ListSortMode.BY_AISLE) {
+                groupTodosByAisle(open).forEach { (aisle, items) ->
+                    item { SectionLabel(aisle.label) }
+                    items(items, key = { it.id }) { item ->
+                        SwipeTodoRow(
+                            enabled = listEnabled,
+                            onComplete = { onToggle(item) },
+                        ) {
+                            TodoRowRich(
+                                item = item,
+                                isPinned = item.id in pinnedTodoIds,
+                                onToggle = onToggle,
+                                onTogglePin = { onTogglePin(item.id) },
+                                onEdit = { editingTodo = item },
+                                onOpenLinkedClip = { url -> openUrl(listContext, url) },
+                                onOpenDashboard = if (showDashboardLinks) {
+                                    { onOpenDashboard(item) }
+                                } else {
+                                    null
+                                },
+                            )
+                        }
+                    }
+                }
+            } else {
+                items(open, key = { it.id }) { item ->
+                    SwipeTodoRow(
+                        enabled = listEnabled,
+                        onComplete = { onToggle(item) },
+                    ) {
+                        TodoRowRich(
+                            item = item,
+                            isPinned = item.id in pinnedTodoIds,
+                            onToggle = onToggle,
+                            onTogglePin = { onTogglePin(item.id) },
+                            onEdit = { editingTodo = item },
+                            onOpenLinkedClip = { url -> openUrl(listContext, url) },
+                            onOpenDashboard = if (showDashboardLinks) {
+                                { onOpenDashboard(item) }
+                            } else {
+                                null
+                            },
+                        )
+                    }
+                }
+            }
+            if (done.isNotEmpty()) {
+                item {
+                    Spacer(Modifier.height(12.dp))
+                    SectionLabel("Done")
+                }
+                items(done, key = { it.id }) { item ->
+                    TodoRowRich(
+                        item = item,
+                        isPinned = item.id in pinnedTodoIds,
+                        onToggle = onToggle,
+                        onTogglePin = { onTogglePin(item.id) },
+                        onEdit = { editingTodo = item },
+                        onDelete = if (deleteEnabled) onDelete else null,
+                        onOpenDashboard = if (showDashboardLinks) {
+                            { onOpenDashboard(item) }
+                        } else {
+                            null
+                        },
+                    )
+                }
+            }
+        }
+        }
+    }
+}
+
+@Composable
+private fun SendPane(
+    drops: List<DropItem>,
+    baseUrl: String,
+    uploadProgress: UploadProgress?,
+    clipEnabled: Boolean,
+    listEnabled: Boolean,
+    uploadEnabled: Boolean,
+    sessionUploadEnabled: Boolean,
+    incomingEnabled: Boolean,
+    incomingUrl: (DropItem) -> String?,
+    onSendClip: (String) -> Unit,
+    onSendList: (String) -> Unit,
+    onUpload: (Uri, String, String) -> Unit,
+    onUploadMultiple: (List<Uri>, String) -> Unit,
+    onUploadBytes: (ByteArray, String, String) -> Unit,
+    onBarcodeScanned: (String) -> Unit,
+    onBulkDownload: (List<DropItem>) -> Unit,
+    onBulkDelete: (List<DropItem>) -> Unit,
+    onOpenDrop: (DropItem) -> Unit,
+    onShareDrop: (DropItem) -> Unit,
+    onSaveDrop: (DropItem) -> Unit,
+    requestCamera: Boolean = false,
+    onCameraHandled: () -> Unit = {},
+) {
+    val context = LocalContext.current
+    val activity = context as? android.app.Activity
+    var draft by rememberSaveable { mutableStateOf("") }
+    var session by rememberSaveable { mutableStateOf("") }
+    var incomingView by rememberSaveable { mutableStateOf(IncomingViewMode.FLAT.name) }
+    val viewMode = IncomingViewMode.entries.find { it.name == incomingView } ?: IncomingViewMode.FLAT
+    var selectionMode by rememberSaveable { mutableStateOf(false) }
+    var selectedKeys by rememberSaveable { mutableStateOf(setOf<String>()) }
+    var captureUri by remember { mutableStateOf<Uri?>(null) }
+    val selectedDrops = drops.filter { dropSelectionKey(it) in selectedKeys }
+    val docScanLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartIntentSenderForResult(),
+    ) { result ->
+        DocumentScan.readPages(context, result.data).forEach { (name, bytes) ->
+            onUploadBytes(bytes, name, session)
+        }
+    }
+    val barcodeLauncher = rememberLauncherForActivityResult(
+        contract = com.journeyapps.barcodescanner.ScanContract(),
+    ) { result ->
+        result.contents?.let(onBarcodeScanned)
+    }
+    val pickVideo = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri != null) onUpload(uri, uri.lastPathSegment ?: "video.mp4", session)
+    }
+    val pickFile = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent(),
+    ) { uri ->
+        if (uri != null) onUpload(uri, uri.lastPathSegment ?: "file.bin", session)
+    }
+    val takePicture = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val uri = captureUri
+        if (ok && uri != null) onUpload(uri, "photo.jpg", session)
+    }
+    val pickImage = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) onUpload(uri, uri.lastPathSegment ?: "photo.jpg", session)
+    }
+    val pickMultiple = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(maxItems = 20),
+    ) { uris ->
+        if (uris.isNotEmpty()) onUploadMultiple(uris, session)
+    }
+
+    LaunchedEffect(requestCamera) {
+        if (!requestCamera) return@LaunchedEffect
+        val dir = File(context.cacheDir, "pics").apply { mkdirs() }
+        val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.files",
+            file,
+        )
+        captureUri = uri
+        takePicture.launch(uri)
+        onCameraHandled()
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SectionLabel("Text or link")
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("Paste a link or note") },
+            minLines = 3,
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (clipEnabled) {
+                Button(
+                    onClick = {
+                        val text = draft.trim()
+                        if (text.isNotEmpty()) {
+                            onSendClip(text)
+                            draft = ""
+                        }
+                    },
+                    enabled = draft.isNotBlank(),
+                ) { Text("To clip") }
+            }
+            if (listEnabled) {
+                OutlinedButton(
+                    onClick = {
+                        val text = draft.trim()
+                        if (text.isNotEmpty()) {
+                            onSendList(text)
+                            draft = ""
+                        }
+                    },
+                    enabled = draft.isNotBlank(),
+                ) { Text("To list") }
+            }
+        }
+        if (uploadEnabled) {
+            SectionLabel("Photo to Incoming")
+            if (sessionUploadEnabled) {
+                OutlinedTextField(
+                    value = session,
+                    onValueChange = { session = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("Session folder (optional)") },
+                    placeholder = { Text("Drop/Sessions/2026-09-02 – Event") },
+                )
+            }
+        uploadProgress?.let { progress ->
+            Column(modifier = Modifier.fillMaxWidth()) {
+                LinearProgressIndicator(
+                    progress = { progress.done.toFloat() / progress.total.coerceAtLeast(1) },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = EdcCyan,
+                )
+                Text(
+                    text = "Uploading ${progress.done} / ${progress.total}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = EdcMuted,
+                )
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(
+                onClick = {
+                    val dir = File(context.cacheDir, "pics").apply { mkdirs() }
+                    val file = File(dir, "capture_${System.currentTimeMillis()}.jpg")
+                    val uri = FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.files",
+                        file,
+                    )
+                    captureUri = uri
+                    takePicture.launch(uri)
+                },
+                enabled = uploadProgress == null,
+            ) {
+                Icon(Icons.Outlined.PhotoCamera, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Camera")
+            }
+            OutlinedButton(
+                onClick = {
+                    pickImage.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                },
+                enabled = uploadProgress == null,
+            ) {
+                Icon(Icons.Outlined.PhotoLibrary, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("One")
+            }
+            OutlinedButton(
+                onClick = {
+                    pickMultiple.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                    )
+                },
+                enabled = uploadProgress == null,
+            ) {
+                Text("Many")
+            }
+            OutlinedButton(
+                onClick = {
+                    pickVideo.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly),
+                    )
+                },
+                enabled = uploadProgress == null,
+            ) {
+                Text("Video")
+            }
+            OutlinedButton(
+                onClick = { pickFile.launch("*/*") },
+                enabled = uploadProgress == null,
+            ) {
+                Text("File")
+            }
+        }
+        IncomingScanRow(
+            onDocumentScan = {
+                if (activity == null) return@IncomingScanRow
+                DocumentScan.start(
+                    activity = activity,
+                    onReady = { sender ->
+                        docScanLauncher.launch(
+                            androidx.activity.result.IntentSenderRequest.Builder(sender).build(),
+                        )
+                    },
+                    onError = { },
+                )
+            },
+            onBarcodeScan = {
+                val options = com.journeyapps.barcodescanner.ScanOptions()
+                    .setPrompt("Scan barcode or QR")
+                    .setBeepEnabled(false)
+                    .setBarcodeImageEnabled(false)
+                    .setCaptureActivity(BarcodeScanActivity::class.java)
+                barcodeLauncher.launch(options)
+            },
+        )
+        }
+        if (incomingEnabled) {
+            SectionLabel("Incoming")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IncomingViewModeChips(
+                    mode = viewMode,
+                    onModeChange = { incomingView = it.name },
+                )
+                TextButton(onClick = {
+                    selectionMode = !selectionMode
+                    if (!selectionMode) selectedKeys = emptySet()
+                }) {
+                    Text(if (selectionMode) "Done" else "Select")
+                }
+            }
+            IncomingBulkBar(
+                selectedCount = selectedKeys.size,
+                onDownloadZip = { onBulkDownload(selectedDrops) },
+                onDelete = {
+                    onBulkDelete(selectedDrops)
+                    selectedKeys = emptySet()
+                    selectionMode = false
+                },
+                onClear = { selectedKeys = emptySet() },
+            )
+            if (drops.isEmpty()) {
+                EmptyHint(incomingEmptyMessage())
+            } else when (viewMode) {
+                IncomingViewMode.GALLERY, IncomingViewMode.SESSIONS -> {
+                    SessionGalleryGrid(
+                        groups = groupDropsBySession(drops),
+                        incomingUrl = incomingUrl,
+                        selectedIds = selectedKeys,
+                        selectionMode = selectionMode,
+                        onToggleSelect = { drop ->
+                            val key = dropSelectionKey(drop)
+                            selectedKeys = if (key in selectedKeys) {
+                                selectedKeys - key
+                            } else {
+                                selectedKeys + key
+                            }
+                        },
+                        onOpenDrop = onOpenDrop,
+                    )
+                }
+                IncomingViewMode.FLAT -> {
+                    drops.forEach { drop ->
+                        RichDropCard(
+                            drop = drop,
+                            imageUrl = incomingUrl(drop)?.takeIf { drop.isImage() },
+                            selected = dropSelectionKey(drop) in selectedKeys,
+                            selectionMode = selectionMode,
+                            onToggleSelect = {
+                                val key = dropSelectionKey(drop)
+                                selectedKeys = if (key in selectedKeys) {
+                                    selectedKeys - key
+                                } else {
+                                    selectedKeys + key
+                                }
+                            },
+                            onOpen = { onOpenDrop(drop) },
+                            onShare = { onShareDrop(drop) },
+                            onSave = { onSaveDrop(drop) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DropCard(
+    drop: DropItem,
+    imageUrl: String?,
+    onOpen: () -> Unit,
+    onShare: () -> Unit,
+    onSave: () -> Unit,
+) {
+    val context = LocalContext.current
+    Card(
+        colors = CardDefaults.cardColors(containerColor = EdcSurface),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                if (imageUrl != null) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context)
+                            .data(imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = drop.name,
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                    )
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(drop.name, fontWeight = FontWeight.Medium)
+                    Text(
+                        text = metaLine(drop.from, drop.ts, formatSize(drop.size)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = EdcMuted,
+                    )
+                }
+            }
+            Row(modifier = Modifier.padding(top = 4.dp)) {
+                TextButton(onClick = onOpen) { Text("Open") }
+                TextButton(onClick = onShare) { Text("Share") }
+                TextButton(onClick = onSave) { Text("Save") }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SettingsPane(
+    settings: EdcSettings,
+    store: SettingsStore,
+    hostHealth: HostHealth?,
+    outboxItems: List<OutboxItem>,
+    autoHost: Boolean,
+    onIdentity: (String) -> Unit,
+    onPreset: (HostPreset) -> Unit,
+    urlValidationError: String?,
+    onCustomUrl: (String) -> Unit,
+    onProbe: () -> Unit,
+    onFindHost: () -> Unit,
+    onAutoHost: (Boolean) -> Unit,
+    backgroundPoll: BackgroundPollMode,
+    onBackgroundPoll: (BackgroundPollMode) -> Unit,
+    onFlushOutbox: () -> Unit,
+    onClearOutbox: () -> Unit,
+    onOpenDashboard: () -> Unit,
+    useHttps: Boolean,
+    onUseHttps: (Boolean) -> Unit,
+    connectionDoctor: ConnectionDoctor,
+    onScanQrPair: () -> Unit,
+    discoveredHosts: List<DiscoveredHost>,
+    discovering: Boolean,
+    onDiscoverHosts: () -> Unit,
+    onSelectDiscovered: (DiscoveredHost) -> Unit,
+    auditEntries: List<AuditEntry>,
+    telemetrySummaryText: String,
+    rateLimitHint: HostRateHint?,
+    featureFlagNotes: List<String>,
+    onTelemetryOptIn: (Boolean) -> Unit,
+    onExportData: suspend () -> Unit,
+    onExportAudit: () -> Unit,
+    onClearAudit: () -> Unit,
+    onResetApp: suspend () -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var doctorReport by remember { mutableStateOf<ConnectionReport?>(null) }
+    var doctorRunning by remember { mutableStateOf(false) }
+    var customDraft by remember(settings.customUrl) { mutableStateOf(settings.customUrl) }
+    var sessionsDraft by remember(settings.pinnedSessions) {
+        mutableStateOf(formatPinnedSessions(settings.pinnedSessions))
+    }
+    var homeWifiDraft by remember(settings.homeWifiSsids) {
+        mutableStateOf(formatPinnedSessions(settings.homeWifiSsids))
+    }
+    var magicDnsDraft by remember(settings.magicDnsHost) { mutableStateOf(settings.magicDnsHost) }
+    var guestNameDraft by remember(settings.guestIdentity) { mutableStateOf(settings.guestIdentity) }
+    var tlsPinDraft by remember(settings.tlsPinSha256) { mutableStateOf(settings.tlsPinSha256) }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        SectionLabel("Who is this phone")
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            effectiveIdentities(hostHealth).forEach { name ->
+                FilterChip(
+                    selected = settings.identity == name,
+                    onClick = { onIdentity(name) },
+                    label = { Text(name) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        SectionLabel("Host")
+        Text(
+            text = "Switch profiles from chips under the top bar, or edit them here.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        settings.profiles.forEach { profile ->
+            OutlinedTextField(
+                value = profile.url,
+                onValueChange = { value ->
+                    scope.launch {
+                        val updated = settings.profiles.map {
+                            if (it.id == profile.id) it.copy(url = value) else it
+                        }
+                        store.setProfiles(updated)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("${profile.name} URL") },
+            )
+        }
+        OutlinedTextField(
+            value = magicDnsDraft,
+            onValueChange = { magicDnsDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Tailscale MagicDNS host") },
+            placeholder = { Text("edc.tail123456.ts.net") },
+            supportingText = { Text("Used for Away when no profile URL overrides it") },
+        )
+        Button(onClick = { scope.launch { store.setMagicDnsHost(magicDnsDraft) } }) {
+            Text("Save MagicDNS host")
+        }
+        Button(onClick = onScanQrPair, modifier = Modifier.fillMaxWidth()) {
+            Text("Scan dashboard QR to pair")
+        }
+        OutlinedButton(onClick = onDiscoverHosts, enabled = !discovering, modifier = Modifier.fillMaxWidth()) {
+            Text(if (discovering) "Searching LAN…" else "Discover EDC on this network")
+        }
+        discoveredHosts.forEach { host ->
+            TextButton(onClick = { onSelectDiscovered(host) }) {
+                Text("${host.name} · ${host.baseUrl} (${host.source})")
+            }
+        }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            HostPreset.entries.forEach { preset ->
+                FilterChip(
+                    selected = settings.preset == preset,
+                    onClick = { onPreset(preset) },
+                    label = { Text(preset.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        if (settings.preset == HostPreset.CUSTOM) {
+            OutlinedTextField(
+                value = customDraft,
+                onValueChange = { customDraft = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Custom URL") },
+                placeholder = { Text("http://host:8765") },
+                isError = urlValidationError != null,
+                supportingText = urlValidationError?.let { err -> { Text(err) } },
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { onCustomUrl(customDraft) }),
+            )
+            Button(onClick = { onCustomUrl(customDraft.trim()) }) { Text("Save URL") }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Auto Home / Away", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Switch host preset when Wi‑Fi or Tailscale changes",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(checked = autoHost, onCheckedChange = onAutoHost)
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Use HTTPS", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Talk to host over https:// instead of http://",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(checked = useHttps, onCheckedChange = onUseHttps)
+        }
+        SectionLabel("Smarter house")
+        OutlinedTextField(
+            value = homeWifiDraft,
+            onValueChange = { homeWifiDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Home Wi‑Fi names") },
+            placeholder = { Text("MyHomeWiFi, House-5G") },
+            supportingText = { Text("Comma-separated SSIDs for the “at home” hint") },
+        )
+        Button(onClick = { scope.launch { store.setHomeWifiSsids(parsePinnedSessions(homeWifiDraft)) } }) {
+            Text("Save home Wi‑Fi names")
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Show dashboard tab", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Embed the house dashboard inside the app",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.showDashboardTab,
+                onCheckedChange = { scope.launch { store.setShowDashboardTab(it) } },
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Require unlock", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Fingerprint or PIN to open the app",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.biometricLock,
+                onCheckedChange = { scope.launch { store.setBiometricLock(it) } },
+            )
+        }
+        OutlinedTextField(
+            value = guestNameDraft,
+            onValueChange = { guestNameDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("Guest identity name") },
+            placeholder = { Text("Guest") },
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = {
+                scope.launch {
+                    store.setGuestMode(
+                        enabled = true,
+                        identity = guestNameDraft.ifBlank { "Guest" },
+                        expiresAt = System.currentTimeMillis() + 24 * 60 * 60 * 1000L,
+                    )
+                }
+            }) {
+                Text("Guest for 24h")
+            }
+            OutlinedButton(onClick = { scope.launch { store.clearGuestMode() } }) {
+                Text("Clear guest")
+            }
+        }
+        OutlinedTextField(
+            value = tlsPinDraft,
+            onValueChange = { tlsPinDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            label = { Text("HTTPS certificate pin (sha256)") },
+            supportingText = { Text("Optional — used when talking to the host over HTTPS") },
+        )
+        Button(onClick = { scope.launch { store.setTlsPinSha256(tlsPinDraft) } }) {
+            Text("Save certificate pin")
+        }
+        SectionLabel("Glanceable")
+        Text(
+            text = "Home widget, lock screen widget, Quick Settings tiles, and optional background alerts.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Show open todos on widget", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Display how many list items are still open",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.widgetShowTodoCount,
+                onCheckedChange = { scope.launch { store.setWidgetShowTodoCount(it) } },
+            )
+        }
+        Text("Widget tap action", style = MaterialTheme.typography.bodySmall, color = EdcMuted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            WidgetTapAction.entries.forEach { action ->
+                FilterChip(
+                    selected = settings.widgetTapAction == action,
+                    onClick = { scope.launch { store.setWidgetTapAction(action) } },
+                    label = { Text(action.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Persistent clip preview", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Ongoing notification with the latest house clip",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.persistentClipPreview,
+                onCheckedChange = { scope.launch { store.setPersistentClipPreview(it) } },
+            )
+        }
+        Text(
+            text = "Quick Settings: add tiles “EDC list” and “EDC photo” from the tile editor.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            BackgroundPollMode.entries.forEach { mode ->
+                FilterChip(
+                    selected = backgroundPoll == mode,
+                    onClick = { onBackgroundPoll(mode) },
+                    label = { Text(mode.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        Text(
+            text = when (backgroundPoll) {
+                BackgroundPollMode.OFF -> "No background checks."
+                BackgroundPollMode.CONSERVATIVE -> "Checks about once an hour when idle."
+                BackgroundPollMode.ACTIVE -> "Checks every 15 minutes (Android minimum)."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        SectionLabel("Share & shortcuts")
+        Text("Default share destination", style = MaterialTheme.typography.bodySmall, color = EdcMuted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ShareDestination.entries.forEach { dest ->
+                FilterChip(
+                    selected = settings.shareDestination == dest,
+                    onClick = { scope.launch { store.setShareDestination(dest) } },
+                    label = { Text(dest.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Skip share chooser", fontWeight = FontWeight.Medium)
+                Text(
+                    text = "Send straight to the default destination above",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            Switch(
+                checked = settings.skipShareChooser,
+                onCheckedChange = { scope.launch { store.setSkipShareChooser(it) } },
+            )
+        }
+        OutlinedTextField(
+            value = sessionsDraft,
+            onValueChange = { sessionsDraft = it },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Pinned Incoming sessions") },
+            placeholder = { Text("holiday, receipts, kids") },
+            supportingText = { Text("Comma-separated — adds direct share shortcuts per folder") },
+        )
+        Button(
+            onClick = {
+                scope.launch {
+                    store.setPinnedSessions(parsePinnedSessions(sessionsDraft))
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Save session shortcuts")
+        }
+        Text("NFC tag action", style = MaterialTheme.typography.bodySmall, color = EdcMuted)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            NfcAction.entries.forEach { action ->
+                FilterChip(
+                    selected = settings.nfcAction == action,
+                    onClick = { scope.launch { store.setNfcAction(action) } },
+                    label = { Text(action.label) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = Color(0xFF0E3A43),
+                        selectedLabelColor = EdcAccent,
+                    ),
+                )
+            }
+        }
+        Text(
+            text = "Program tags with edc://copy, edc://open, edc://list, or edc://send?text=hello",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        Text(
+            text = "Automation intents are documented in AUTOMATION.md in the repo.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        Text(
+            text = settings.baseUrl.ifBlank { "No host URL set" },
+            fontFamily = FontFamily.Monospace,
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        Button(onClick = onProbe, modifier = Modifier.fillMaxWidth()) { Text("Test connection") }
+        OutlinedButton(onClick = onFindHost, modifier = Modifier.fillMaxWidth()) {
+            Text("Find host (Home, then Away)")
+        }
+        TrustDiagnosticsSection(
+            settings = settings,
+            auditEntries = auditEntries,
+            telemetrySummaryText = telemetrySummaryText,
+            rateLimitHint = rateLimitHint,
+            featureFlagNotes = featureFlagNotes,
+            onTelemetryOptIn = onTelemetryOptIn,
+            onExportData = onExportData,
+            onExportAudit = onExportAudit,
+            onClearAudit = onClearAudit,
+            onResetApp = onResetApp,
+        )
+        SectionLabel("Connection doctor")
+        Text(
+            text = "Checks each host endpoint and latency. Copy the log if something fails.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+        Button(
+            onClick = {
+                scope.launch {
+                    doctorRunning = true
+                    doctorReport = withContext(Dispatchers.IO) { connectionDoctor.run(settings) }
+                    doctorRunning = false
+                }
+            },
+            enabled = !doctorRunning,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            if (doctorRunning) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp),
+                    strokeWidth = 2.dp,
+                    color = EdcAccent,
+                )
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(if (doctorRunning) "Running checks…" else "Run connection doctor")
+        }
+        doctorReport?.let { report ->
+            report.checks.forEach { check ->
+                Text(
+                    text = "${check.name}: ${check.code} · ${check.latencyMs}ms" +
+                        if (check.detail.isNotBlank()) " · ${check.detail}" else "",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (check.ok) EdcMuted else MaterialTheme.colorScheme.error,
+                )
+            }
+            OutlinedButton(
+                onClick = {
+                    val log = connectionDoctor.exportLog(report)
+                    val clipboard = context.getSystemService(ClipboardManager::class.java)
+                    clipboard.setPrimaryClip(ClipData.newPlainText("EDC doctor", log))
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Copy debug log")
+            }
+        }
+        if (hostHealth != null) {
+            SectionLabel("Host info")
+            Text(
+                text = hostHealth.summary(),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            if (hostHealth.apiVersion.isNotBlank()) {
+                Text(
+                    text = "Host API ${hostHealth.apiVersion}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            if (hostHealth.minClientVersion.isNotBlank()) {
+                Text(
+                    text = "Requires client ${hostHealth.minClientVersion}+",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            hostHealth.capabilities.summaryLines().forEach { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            if (hostHealth.knownUsers.isNotEmpty()) {
+                Text(
+                    text = "Identities from host: ${hostHealth.knownUsers.joinToString(", ")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            if (hostHealth.dashboardUrl.isNotBlank()) {
+                Text(
+                    text = hostHealth.dashboardUrl,
+                    fontFamily = FontFamily.Monospace,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+            }
+            OutlinedButton(onClick = onOpenDashboard, modifier = Modifier.fillMaxWidth()) {
+                Text("Open house dashboard")
+            }
+        }
+        if (outboxItems.isNotEmpty()) {
+            SectionLabel("Pending sends (${outboxItems.size})")
+            outboxItems.forEach { item ->
+                Text(
+                    text = item.label(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = EdcMuted,
+                )
+                item.statusLine()?.let { line ->
+                    Text(
+                        text = line,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            Button(onClick = onFlushOutbox, modifier = Modifier.fillMaxWidth()) {
+                Text("Retry queued sends")
+            }
+            OutlinedButton(onClick = onClearOutbox, modifier = Modifier.fillMaxWidth()) {
+                Text("Clear queue")
+            }
+        }
+        Text(
+            text = "Home Wi-Fi uses the house LAN. Away needs Tailscale on this phone. Find host tries both and keeps whichever answers.",
+            style = MaterialTheme.typography.bodySmall,
+            color = EdcMuted,
+        )
+    }
+}
+
+@Composable
+private fun ClipCard(
+    entry: ClipEntry,
+    featured: Boolean,
+    isPinned: Boolean,
+    onTogglePin: () -> Unit,
+    onCopy: (String) -> Unit,
+    onShare: (String) -> Unit,
+    onOpenUrl: (String) -> Unit,
+    onOpenDashboard: ((ClipEntry) -> Unit)? = null,
+) {
+    val context = LocalContext.current
+    var expanded by rememberSaveable(entry.id + entry.ts) { mutableStateOf(false) }
+    val long = entry.text.length > clipPreviewChars
+    val shown = if (expanded || !long) entry.text else entry.text.take(clipPreviewChars) + "…"
+    val directUrl = firstUrl(entry.text)
+    val phone = firstPhone(entry.text)
+    val address = firstAddress(entry.text)
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (featured) EdcSurfaceHi else EdcSurface,
+        ),
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            if (entry.text.contains("```")) {
+                ClipMarkdownBody(
+                    text = shown,
+                    color = EdcInk,
+                    onOpenUrl = onOpenUrl,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCopy(entry.text) },
+                )
+            } else {
+                LinkifiedText(
+                    text = shown,
+                    color = EdcInk,
+                    linkColor = EdcAccent,
+                    onOpenUrl = onOpenUrl,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onCopy(entry.text) },
+                )
+            }
+            if (long) {
+                TextButton(onClick = { expanded = !expanded }) {
+                    Text(if (expanded) "Show less" else "Show more")
+                }
+            }
+            directUrl?.let { url ->
+                Text(
+                    text = linkPreviewLabel(url),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = EdcMuted,
+                )
+            }
+            Row(
+                modifier = Modifier.padding(top = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (directUrl != null && !entry.text.trim().equals(directUrl, ignoreCase = true)) {
+                    TextButton(onClick = { onOpenUrl(directUrl) }) { Text("Open link") }
+                }
+                phone?.let { number ->
+                    TextButton(onClick = { dialPhone(context, number) }) {
+                        Icon(Icons.Outlined.Phone, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Call")
+                    }
+                }
+                address?.let { line ->
+                    TextButton(onClick = { openMaps(context, line) }) {
+                        Icon(Icons.Outlined.Place, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Map")
+                    }
+                }
+                if (onOpenDashboard != null) {
+                    TextButton(onClick = { onOpenDashboard(entry) }) { Text("Dashboard") }
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = metaLine(entry.from.ifBlank { "EDC" }, entry.ts),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = EdcMuted,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                IconButton(onClick = onTogglePin) {
+                    Icon(
+                        if (isPinned) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                        contentDescription = if (isPinned) "Unpin" else "Pin",
+                        tint = if (isPinned) EdcAccent else EdcMuted,
+                    )
+                }
+                IconButton(onClick = { onShare(entry.text) }) {
+                    Icon(Icons.Outlined.Share, contentDescription = "Share")
+                }
+                IconButton(onClick = { onCopy(entry.text) }) {
+                    Icon(Icons.Outlined.ContentCopy, contentDescription = "Copy")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TodoRow(
+    item: TodoItem,
+    isPinned: Boolean,
+    onToggle: (TodoItem) -> Unit,
+    onTogglePin: () -> Unit,
+    onDelete: ((TodoItem) -> Unit)? = null,
+    onOpenDashboard: (() -> Unit)? = null,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onToggle(item) }
+            .padding(vertical = 4.dp)
+            .alpha(if (item.done) 0.55f else 1f),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = item.done, onCheckedChange = { onToggle(item) })
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.text,
+                textDecoration = if (item.done) TextDecoration.LineThrough else null,
+            )
+            val meta = metaLine(item.from, item.ts)
+            if (meta.isNotBlank()) {
+                Text(meta, style = MaterialTheme.typography.labelSmall, color = EdcMuted)
+            }
+        }
+        IconButton(onClick = onTogglePin) {
+            Icon(
+                if (isPinned) Icons.Outlined.Star else Icons.Outlined.StarBorder,
+                contentDescription = if (isPinned) "Unpin" else "Pin",
+                tint = if (isPinned) EdcAccent else EdcMuted,
+            )
+        }
+        if (onOpenDashboard != null) {
+            TextButton(onClick = onOpenDashboard) { Text("Dashboard") }
+        }
+        if (item.done && onDelete != null) {
+            TextButton(onClick = { onDelete(item) }) { Text("Remove") }
+        }
+    }
+}
+
+@Composable
+private fun SendField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    actionLabel: String,
+    onAction: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector = Icons.AutoMirrored.Outlined.Send,
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier.weight(1f),
+            singleLine = true,
+            placeholder = { Text(placeholder) },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
+            keyboardActions = KeyboardActions(onSend = {
+                onAction()
+                keyboard?.hide()
+            }),
+        )
+        IconButton(
+            onClick = {
+                onAction()
+                keyboard?.hide()
+            },
+            enabled = value.isNotBlank(),
+        ) {
+            Icon(icon, contentDescription = actionLabel)
+        }
+    }
+}
+
+@Composable
+internal fun SectionLabel(text: String) {
+    Text(
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
+        color = EdcAccent,
+        fontWeight = FontWeight.SemiBold,
+    )
+}
+
+@Composable
+private fun EmptyHint(text: String, modifier: Modifier = Modifier) {
+    Text(text, color = EdcMuted, style = MaterialTheme.typography.bodyMedium, modifier = modifier)
+}
+
+private fun effectiveIdentities(health: HostHealth?): List<String> =
+    health?.knownUsers?.takeIf { it.isNotEmpty() } ?: identities
+
+private fun connectionLabel(
+    settings: EdcSettings,
+    stale: Boolean,
+    error: String?,
+    lastSyncedAt: Long? = null,
+    homeHintMonitor: HomeHintMonitor? = null,
+): String {
+    if (stale && error != null) {
+        return formatStaleness(lastSyncedAt) ?: "Offline · cached"
+    }
+    if (error != null) return "Unreachable"
+    formatStaleness(lastSyncedAt)?.let { return it.replaceFirstChar { c -> c.uppercase() } }
+    homeHintMonitor?.hintLabel(settings)?.let { return it }
+    return when (settings.preset) {
+        HostPreset.LAN -> "Home LAN"
+        HostPreset.TAILSCALE -> "Away"
+        HostPreset.CUSTOM -> settings.customUrl.ifBlank { "Custom" }
+    }
+}
+
+internal fun metaLine(from: String, ts: String, extra: String = ""): String =
+    listOf(from, formatTs(ts), extra).filter { it.isNotBlank() }.joinToString(" · ")
+
+private fun formatTs(ts: String): String {
+    if (ts.isBlank()) return ""
+    val instant = runCatching { Instant.parse(ts) }.getOrNull()
+        ?: runCatching { OffsetDateTime.parse(ts).toInstant() }.getOrNull()
+        ?: return ts
+    return DateTimeFormatter.ofLocalizedDateTime(FormatStyle.SHORT)
+        .withZone(ZoneId.systemDefault())
+        .format(instant)
+}
+
+private fun formatSize(bytes: Long): String {
+    if (bytes <= 0L) return ""
+    if (bytes < 1024) return "$bytes B"
+    val kb = bytes / 1024.0
+    if (kb < 1024) return String.format(Locale.US, "%.1f KB", kb)
+    return String.format(Locale.US, "%.1f MB", kb / 1024.0)
+}
