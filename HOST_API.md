@@ -1,6 +1,8 @@
 # Host API policy (EDC pocket 2.0)
 
-EDC pocket **2.0** is the first release with an explicit host API compatibility policy.
+**Frozen.** Native EDC pocket 2.0 is a reference client. Host-side fields below are implemented in the **Basic** repo as **H1** (honest `/api/health`, ETag, users, theme, rate limits) when Mike picks that phase — not by shipping another APK.
+
+EDC pocket **2.0** is the first (and last) native release with an explicit host API compatibility policy.
 
 ## Version fields
 

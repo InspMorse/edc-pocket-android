@@ -7,6 +7,12 @@ Versioning: **0.x** = pre-release phases · **1.0** = Phase 6 trust release · *
 
 ---
 
+## Frozen — 2026-09-03
+
+Native programme closed. House phone client is host `/pocket`. This tree stays a **v2.0** reference snapshot. Host follow-up is Basic **H1**, not another APK.
+
+---
+
 ## [2.0.0] — Phase 12
 
 ### Added

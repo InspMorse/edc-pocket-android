@@ -1,8 +1,35 @@
-# EDC pocket — Android app (build the APK here)
+# EDC pocket — frozen at v2.0 (reference)
+
+**Status: dormant.** Native Android is **out of programme**. Android Studio is gone from the house.
+
+The phone client of record is the host page on New (HTTP, same origin as the APIs):
+
+- Home: `http://192.168.0.99:8765/pocket`
+- Also: `http://192.168.0.99:8765/m`
+- Away: Tailscale to New, then `/pocket` — live IP is in the host repo (`AGENT.md` / `POCKET.md`), not a hardcoded address here.
+
+No APK required. The browser mixed-content block does not apply because `/pocket` is served from the same HTTP origin as `/api/*`.
+
+This repository keeps the finished **v2.0** native app as a reference snapshot (Phases 0–12). Do not expect APK builds, Play uploads, or further native work unless Mike reopens the programme.
+
+| | |
+|---|---|
+| **Last release** | **v2.0** (`versionName` 2.0, `versionCode` 13) |
+| **Merged** | [PR #2](https://github.com/InspMorse/edc-pocket-android/pull/2) — Phase 12 trust at scale |
+| **Host work** | Honest `/api/health`, ETag, theme, rate limits live in the **Basic** host repo as **H1** — not here |
+| **Ignore** | Draft [PR #1](https://github.com/InspMorse/edc-pocket-android/pull/1) (Cloud Agent env) — superseded by v2.0 on `main` |
+
+Roadmap freeze: [ROADMAP.md](ROADMAP.md). Trust docs (historical): [HOST_API.md](HOST_API.md), [SECURITY.md](SECURITY.md), [BETA.md](BETA.md). Automation intents: [AUTOMATION.md](AUTOMATION.md).
+
+Client only. Never hosts.
+
+---
+
+# Historical: Android app (build the APK here)
 
 Open this folder in **Android Studio** and build an APK. The native app talks HTTP to the house host directly, so the browser mixed-content block does not apply.
 
-See **[ROADMAP.md](ROADMAP.md)** for the full product plan (Phases 0–12 + moonshots).
+See **[ROADMAP.md](ROADMAP.md)** for the product plan (Phases 0–12 + moonshots). All phases are **done**.
 
 ## Build APK
 
@@ -50,11 +77,7 @@ CI runs on every push/PR — see [`.github/workflows/ci.yml`](.github/workflows/
 - **v1.5** — widget v2, lock screen widget, QS tiles, persistent preview, share v2, NFC, automation API
 - **v1.7** — multi-host profiles, mDNS discovery, MagicDNS, QR pairing, dashboard WebView, guest mode, biometric lock, TLS pinning
 - **v1.9** — todo notes/aisles/recurrence, session gallery, bulk Incoming, doc/barcode scan, markdown clips
-
-See **[ROADMAP.md](ROADMAP.md)** — **v1.9** shipped (Phase 11); Phase **12** remains toward **2.0**.  
-Automation intents: **[AUTOMATION.md](AUTOMATION.md)**
-
-Client only. Never hosts.
+- **v2.0** — audit log, data export/reset, feature flags, telemetry opt-in, HOST_API/SECURITY/BETA docs
 
 ## Privacy & permissions
 
@@ -63,17 +86,17 @@ EDC pocket is a **personal house client**. It talks only to hosts you configure 
 | Permission | Why |
 |------------|-----|
 | **INTERNET** | Read/write clipboard, list, and Incoming on your house host |
-| **ACCESS_NETWORK_STATE** | Auto Home/Away switching when Wi‑Fi or VPN changes |
-| **POST_NOTIFICATIONS** | Optional “new clip” alerts (Android 13+; only if you enable background poll) |
+| **ACCESS_NETWORK_STATE** | Auto Home/Away switching when Wi-Fi or VPN changes |
+| **POST_NOTIFICATIONS** | Optional "new clip" alerts (Android 13+; only if you enable background poll) |
 | **Camera** *(optional hardware)* | Send tab — take a photo to Incoming; not required to install |
 
 **Data stored on device:** identity name, host URL preset, clip filter, outbox queue, widget/notification cache, and DataStore preferences. Queued photos are copied to app storage until sent.
 
 **Cleartext HTTP:** enabled so the app can reach typical home LAN hosts (`http://192.168.x.x`). Use the Settings **Use HTTPS** toggle when your host serves TLS.
 
-## Hosts
+## Hosts (historical native-app defaults)
 
 - Home: `http://192.168.0.99:8765`
-- Away: `http://100.70.53.87:8765` — Tailscale must be connected on the phone
+- Away: confirm the live Tailscale IP in the host repo before using any address baked into old APKs
 
 minSdk 31. applicationId `house.edc.pocket`.

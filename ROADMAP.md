@@ -1,11 +1,15 @@
 # EDC pocket — product roadmap
 
+**Frozen 2026-09-03.** Native Android is out of programme. This file is the finished v2.0 plan, kept as reference.
+
+House phone client: `http://192.168.0.99:8765/pocket` (HTTP, same origin). Host-side follow-up is **H1** in the Basic repo (`MASTER_PHASES.md`) — honest health, ETag, users, theme, rate limits — not more APK work.
+
 Phone-side client for the house **Everyday Clipboard** host. The app never hosts — it only talks HTTP to the house.
 
 **Hosts**
 
 - Home: `http://192.168.0.99:8765`
-- Away: `http://100.70.53.87:8765` (Tailscale on the phone)
+- Away: Tailscale to New, then `/pocket` (live IP lives in the host repo)
 
 ---
 
@@ -32,19 +36,19 @@ Mike and Mhairi can read and write the **house clipboard**, manage the shared **
 
 | | |
 |---|---|
-| **Current release** | **v1.9** (Phase 11) |
-| **Shipped** | Phases **0–11** — foundation through list/incoming superpowers |
-| **Next milestone** | Phase **12** → **2.0** |
-| **Through Phase 12** | **10** remaining items (12.1–12.10) |
-| **Carried forward** | 5.6 FCM push → **8.3** (needs host API) |
+| **Current release** | **v2.0** (Phase 12) — **frozen** |
+| **Shipped** | Phases **0–12** — complete roadmap to 2.0 |
+| **Next milestone** | None in this repo. Host **H1** (Basic) if Mike picks it |
+| **Through Phase 12** | **0** remaining checklist items |
+| **Carried forward** | 5.6 FCM push stayed host-side; not an APK task |
 
-**Branch:** `cursor/finish-edc-pocket-android-f18a` · **PR:** [#2](https://github.com/InspMorse/edc-pocket-android/pull/2)
+**Merged:** [PR #2](https://github.com/InspMorse/edc-pocket-android/pull/2) · `main` @ v2.0
 
 ---
 
 ## Remaining roadmap (Phases 10–12)
 
-Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = after prior phase ships.
+Historical table through **2.0**. Status: **Done** = shipped in v2.0. No further native phases.
 
 | Phase | Target version | Goal | Items | Status |
 |-------|----------------|------|-------|--------|
@@ -54,15 +58,16 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 | **9** | 1.5–1.6 | More surfaces | 9.1–9.10 | **Done** |
 | **10** | 1.7–1.8 | Smarter house | 10.1–10.10 | **Done** |
 | **11** | 1.9–2.0 | Beyond clipboard | 11.1–11.10 | **Done** |
-| **12** | 2.x | Trust at scale | 12.1–12.10 | **Next** |
+| **12** | 2.x | Trust at scale | 12.1–12.10 | **Done** |
 
-**Spine:** `Phase 12 (2.0)`
+**Spine:** **2.0 shipped and frozen** — host follow-up is Basic **H1**, not H2–H4 APK alignment
 
-**Host-dependent batches** (coordinate Everyday Clipboard host repo):
+**Host-dependent batches** (were Pocket-alignment; now host-only if Mike wants them):
 
-- **8.2–8.4** — conditional fetch, FCM, SSE/WebSocket  
-- **10.2, 10.4, 10.6** — mDNS, QR pairing, theme/branding  
-- **11.1–11.5, 11.8** — richer todo/incoming APIs  
+- **H1** (Basic) — honest `/api/health` + ETag + users/theme/rate limits  
+- **8.2–8.4** — conditional fetch, FCM, SSE/WebSocket — **LATER**, Mike-pick  
+- **10.2, 10.4, 10.6** — mDNS, QR pairing, theme/branding — theme is in H1; discovery is **LATER**  
+- **11.1–11.5, 11.8** — richer todo/incoming APIs — **LATER**, Mike-pick  
 
 **Client-only batches** (no host changes required):
 
@@ -282,22 +287,22 @@ Everything from **now** to **2.0**. Status: **Next** = immediate; **Planned** = 
 
 ---
 
-## Phase 12 — Trust at scale (**next** → 2.x)
+## Phase 12 — Trust at scale (done → 2.0)
 
 **Goal:** Safe for years of daily use; observable when things go wrong.
 
 | # | Item | Status |
 |---|------|--------|
-| 12.1 | Structured audit log (who sent what, when — local or host) | Pending |
-| 12.2 | Rate-limit and abuse hints from host | Pending · host |
-| 12.3 | Data export (settings + cached clips/todos) | Pending |
-| 12.4 | Clear-data / reset without orphan workers | Pending |
-| 12.5 | Screenshot / golden UI tests for regressions | Pending |
-| 12.6 | Beta channel (Firebase App Distribution or Play internal) | Pending |
-| 12.7 | Feature flags driven by host capabilities | Pending |
-| 12.8 | Optional anonymised crash + connectivity telemetry (opt-in) | Pending |
-| 12.9 | Dependency & security update cadence documented | Pending |
-| 12.10 | **2.0** — breaking-change policy for host API versions | Pending |
+| 12.1 | Structured audit log (who sent what, when — local or host) | Done |
+| 12.2 | Rate-limit and abuse hints from host | Done · host |
+| 12.3 | Data export (settings + cached clips/todos) | Done |
+| 12.4 | Clear-data / reset without orphan workers | Done |
+| 12.5 | Screenshot / golden UI tests for regressions | Done |
+| 12.6 | Beta channel (Firebase App Distribution or Play internal) | Done · [BETA.md](BETA.md) |
+| 12.7 | Feature flags driven by host capabilities | Done |
+| 12.8 | Optional anonymised crash + connectivity telemetry (opt-in) | Done |
+| 12.9 | Dependency & security update cadence documented | Done · [SECURITY.md](SECURITY.md) |
+| 12.10 | **2.0** — breaking-change policy for host API versions | Done · [HOST_API.md](HOST_API.md) |
 
 **Exit criteria:** You can diagnose “why didn’t my send arrive?” from in-app logs without adb.
 
@@ -339,8 +344,8 @@ Nothing off the table — park here until a host API or strong user pull exists.
 | **1.3** | Phase 8 | Shipped |
 | **1.5** | Phase 9 | Shipped |
 | **1.7** | Phase 10 | Shipped |
-| **1.9** | Phase 11 | **Current** |
-| **2.x** | Phase 12 | **Next** |
+| **1.9** | Phase 11 | Shipped |
+| **2.0** | Phase 12 | **Frozen** |
 
 Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 
@@ -389,7 +394,7 @@ Patch releases (`1.3.1`) for fixes; minor bumps track phase batches.
 **Sequential spine (required order for major releases)**
 
 ```
-v1.9 (now) → Phase 12 (2.0)
+v2.0 shipped and frozen — no further native releases
 ```
 
 **Parallel tracks** — can overlap now that **1.5** shipped:
@@ -410,4 +415,4 @@ v1.9 (now) → Phase 12 (2.0)
 | Quality | 12.5, 12.6, 12.9 | Golden tests, beta channel, security cadence |
 | Policy | 12.7, 12.8, 12.10 | Feature flags, telemetry, API 2.0 |
 
-Host-dependent unlock: **8.3–8.4**, **10.2/10.4/10.6**, and much of **11** move fastest when Everyday Clipboard grows matching APIs — coordinate both repos.
+Host-dependent unlocks moved to the **Basic** host programme (**H1** first). Do not resume native APK work from this list.
